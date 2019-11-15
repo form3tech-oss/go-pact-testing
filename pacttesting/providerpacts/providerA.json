@@ -1,0 +1,7 @@
+{
+  "provider" : { "name" : "go-pact-testing"  },
+  "consumer" : { "name" : "consumerA"  },
+  "interactions" : [
+
+  ]
+}

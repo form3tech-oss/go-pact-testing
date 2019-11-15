@@ -1,0 +1,42 @@
+{
+  "provider": {
+    "name": "test"
+  },
+  "consumer": {
+    "name": "testclient"
+  },
+  "messages": [
+    {
+      "description": "message 2",
+      "contents": {
+        "one": "First Entry",
+        "two": "Second entry",
+        "id": 5577006791947779410,
+        "list": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      "matchingRules": {
+        "body": {
+          "$.id": {
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pact-specification": {
+      "version": "3.0.0"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  }
+}
