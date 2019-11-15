@@ -1,0 +1,22 @@
+{
+  "provider": {
+    "name": "test"
+  },
+  "consumer": {
+    "name": "testclient"
+  },
+  "messages": [
+    {
+      "description": "message 1",
+      "contents": "Hello, Pact Message Verifier"
+    }
+  ],
+  "metadata": {
+    "pact-specification": {
+      "version": "3.0.0"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  }
+}

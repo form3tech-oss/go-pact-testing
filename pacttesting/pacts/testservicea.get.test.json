@@ -1,0 +1,23 @@
+{
+  "provider" : { "name" : "testservicea"  },
+  "consumer" : { "name" : "go-pact-testing"  },
+  "interactions" : [
+
+    {
+      "description" : "Request for a test endpoint A",
+      "request" : {
+        "method" : "GET",
+        "path" : "/v1/test"
+      },
+      "response" : {
+        "status" : 200,
+        "headers" : {
+          "Content-Type" : "application/json; charset=utf-8"
+        },
+        "body" : {
+          "foo": "bar"
+        }
+      }
+    }
+  ]
+}
