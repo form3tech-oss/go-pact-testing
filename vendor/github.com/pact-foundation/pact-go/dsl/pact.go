@@ -12,14 +12,17 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/logutils"
 	"github.com/pact-foundation/pact-go/install"
+	"github.com/pact-foundation/pact-go/proxy"
 	"github.com/pact-foundation/pact-go/types"
 	"github.com/pact-foundation/pact-go/utils"
 )
@@ -30,7 +33,7 @@ type Pact struct {
 	Server *types.MockServer
 
 	// Pact RPC Client.
-	pactClient *PactClient
+	pactClient Client
 
 	// Consumer is the name of the Consumer/Client.
 	Consumer string
@@ -155,12 +158,9 @@ func (p *Pact) Setup(startMockServer bool) *Pact {
 	}
 
 	if p.pactClient == nil {
-		p.pactClient = NewClient()
-		p.pactClient.TimeoutDuration = p.ClientTimeout
-	}
-
-	if p.PactFileWriteMode == "" {
-		p.PactFileWriteMode = "overwrite"
+		c := NewClient()
+		c.TimeoutDuration = p.ClientTimeout
+		p.pactClient = c
 	}
 
 	if p.PactFileWriteMode == "" {
@@ -209,7 +209,7 @@ func (p *Pact) setupLogging() {
 			p.LogLevel = "INFO"
 		}
 		p.logFilter = &logutils.LevelFilter{
-			Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR"},
+			Levels:   []logutils.LogLevel{"TRACE", "DEBUG", "INFO", "WARN", "ERROR"},
 			MinLevel: logutils.LogLevel(p.LogLevel),
 			Writer:   os.Stderr,
 		}
@@ -238,6 +238,7 @@ func (p *Pact) Teardown() *Pact {
 func (p *Pact) Verify(integrationTest func() error) error {
 	p.Setup(true)
 	log.Println("[DEBUG] pact verify")
+	var err error
 
 	// Check if we are verifying messages or if we actually have interactions
 	if len(p.Interactions) == 0 {
@@ -250,15 +251,23 @@ func (p *Pact) Verify(integrationTest func() error) error {
 		Provider: p.Provider,
 	}
 
+	// Cleanup all interactions
+	defer func(mockServer *MockService) {
+		log.Println("[DEBUG] clearing interactions")
+
+		p.Interactions = make([]*Interaction, 0)
+		err = mockServer.DeleteInteractions()
+	}(mockServer)
+
 	for _, interaction := range p.Interactions {
-		err := mockServer.AddInteraction(interaction)
+		err = mockServer.AddInteraction(interaction)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Run the integration test
-	err := integrationTest()
+	err = integrationTest()
 	if err != nil {
 		return err
 	}
@@ -269,10 +278,7 @@ func (p *Pact) Verify(integrationTest func() error) error {
 		return err
 	}
 
-	// Clear out interations
-	p.Interactions = make([]*Interaction, 0)
-
-	return mockServer.DeleteInteractions()
+	return err
 }
 
 // WritePact should be called writes when all tests have been performed for a
@@ -297,21 +303,90 @@ func (p *Pact) WritePact() error {
 
 // VerifyProviderRaw reads the provided pact files and runs verification against
 // a running Provider API, providing raw response from the Verification process.
+//
+// Order of events: BeforeEach, stateHandlers, requestFilter(pre <execute provider> post), AfterEach
 func (p *Pact) VerifyProviderRaw(request types.VerifyRequest) (types.ProviderVerifierResponse, error) {
 	p.Setup(false)
+	var res types.ProviderVerifierResponse
 
-	// If we provide a Broker, we go to it to find consumers
-	if request.BrokerURL != "" {
-		log.Println("[DEBUG] pact provider verification - finding all consumers from broker: ", request.BrokerURL)
-		err := findConsumers(p.Provider, &request)
-		if err != nil {
-			return types.ProviderVerifierResponse{}, err
-		}
+	u, err := url.Parse(request.ProviderBaseURL)
+
+	if err != nil {
+		return res, err
+	}
+
+	m := []proxy.Middleware{}
+
+	if request.BeforeEach != nil {
+		m = append(m, BeforeEachMiddleware(request.BeforeEach))
+	}
+
+	if request.AfterEach != nil {
+		m = append(m, AfterEachMiddleware(request.AfterEach))
+	}
+
+	if len(request.StateHandlers) > 0 {
+		m = append(m, stateHandlerMiddleware(request.StateHandlers))
+	}
+
+	if request.RequestFilter != nil {
+		m = append(m, request.RequestFilter)
+	}
+
+	// Configure HTTP Verification Proxy
+	opts := proxy.Options{
+		TargetAddress:             fmt.Sprintf("%s:%s", u.Hostname(), u.Port()),
+		TargetScheme:              u.Scheme,
+		TargetPath:                u.Path,
+		Middleware:                m,
+		InternalRequestPathPrefix: providerStatesSetupPath,
+		CustomTLSConfig:           request.CustomTLSConfig,
+	}
+
+	// Starts the message wrapper API with hooks back to the state handlers
+	// This maps the 'description' field of a message pact, to a function handler
+	// that will implement the message producer. This function must return an object and optionally
+	// and error. The object will be marshalled to JSON for comparison.
+	port, err := proxy.HTTPReverseProxy(opts)
+
+	// Backwards compatibility, setup old provider states URL if given
+	// Otherwise point to proxy
+	setupURL := request.ProviderStatesSetupURL
+	if request.ProviderStatesSetupURL == "" && len(request.StateHandlers) > 0 {
+		setupURL = fmt.Sprintf("http://localhost:%d%s", port, providerStatesSetupPath)
+	}
+
+	// Construct verifier request
+	verificationRequest := types.VerifyRequest{
+		ProviderBaseURL:            fmt.Sprintf("http://localhost:%d", port),
+		PactURLs:                   request.PactURLs,
+		BrokerURL:                  request.BrokerURL,
+		Tags:                       request.Tags,
+		BrokerUsername:             request.BrokerUsername,
+		BrokerPassword:             request.BrokerPassword,
+		BrokerToken:                request.BrokerToken,
+		PublishVerificationResults: request.PublishVerificationResults,
+		ProviderVersion:            request.ProviderVersion,
+		Provider:                   request.Provider,
+		ProviderStatesSetupURL:     setupURL,
+		CustomProviderHeaders:      request.CustomProviderHeaders,
+	}
+
+	if request.Provider == "" {
+		verificationRequest.Provider = p.Provider
+	}
+
+	portErr := waitForPort(port, "tcp", "localhost", p.ClientTimeout,
+		fmt.Sprintf(`Timed out waiting for http verification proxy on port %d - check for errors`, port))
+
+	if portErr != nil {
+		log.Fatal("Error:", err)
+		return res, portErr
 	}
 
 	log.Println("[DEBUG] pact provider verification")
 
-	return p.pactClient.VerifyProvider(request)
+	return p.pactClient.VerifyProvider(verificationRequest)
 }
 
 // VerifyProvider accepts an instance of `*testing.T`
@@ -320,12 +395,33 @@ func (p *Pact) VerifyProviderRaw(request types.VerifyRequest) (types.ProviderVer
 func (p *Pact) VerifyProvider(t *testing.T, request types.VerifyRequest) (types.ProviderVerifierResponse, error) {
 	res, err := p.VerifyProviderRaw(request)
 
+	if len(res.Examples) == 0 {
+		message := "No pacts found to verifify"
+
+		if len(request.Tags) > 0 {
+			message = fmt.Sprintf("%s. Check the tags provided (%s) for your broker (%s) are correct", message, strings.Join(request.Tags, ","), request.BrokerURL)
+		}
+
+		if request.FailIfNoPactsFound {
+			t.Errorf(message)
+		} else {
+			t.Logf(message)
+		}
+	}
+
 	for _, example := range res.Examples {
 		t.Run(example.Description, func(st *testing.T) {
 			st.Log(example.FullDescription)
+
 			if example.Status != "passed" {
-				t.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
+				if strings.Contains(example.FullDescription, "[PENDING]") {
+					t.Logf("NOTICE: This interaction is in a pending state because it has not yet been successfully verified by %s. If this verification fails, it will not cause the overall build to fail. Read more at https://pact.io/pending", p.Provider)
+					t.Logf("%s\n%s\n", example.FullDescription, example.Exception.Message)
+				} else {
+					t.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
+				}
 			}
+
 		})
 	}
 
@@ -343,7 +439,90 @@ var checkCliCompatibility = func() {
 	}
 }
 
-var messageHandler = func(messageHandlers MessageHandlers, stateHandlers StateHandlers) http.HandlerFunc {
+// BeforeEachMiddleware is invoked before any other, only on the __setup
+// request (to avoid duplication)
+func BeforeEachMiddleware(BeforeEach types.Hook) proxy.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == providerStatesSetupPath {
+
+				log.Println("[DEBUG] executing before hook")
+				err := BeforeEach()
+
+				if err != nil {
+					log.Println("[ERROR] error executing before hook:", err)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AfterEachMiddleware is invoked after any other, and is the last
+// function to be called prior to returning to the test suite. It is
+// therefore not invoked on __setup
+func AfterEachMiddleware(AfterEach types.Hook) proxy.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+
+			if r.URL.Path != providerStatesSetupPath {
+				log.Println("[DEBUG] executing after hook")
+				err := AfterEach()
+
+				if err != nil {
+					log.Println("[ERROR] error executing after hook:", err)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}
+		})
+	}
+}
+
+// stateHandlerMiddleware responds to the various states that are
+// given during provider verification
+//
+// statehandler accepts a state object from the verifier and executes
+// any state handlers associated with the provider.
+// It will not execute further middleware if it is the designted "state" request
+func stateHandlerMiddleware(stateHandlers types.StateHandlers) proxy.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == providerStatesSetupPath {
+				var s *types.ProviderState
+				decoder := json.NewDecoder(r.Body)
+				decoder.Decode(&s)
+
+				// Setup any provider state
+				for _, state := range s.States {
+					sf, stateFound := stateHandlers[state]
+
+					if !stateFound {
+						log.Printf("[WARN] state handler not found for state: %v", state)
+					} else {
+						// Execute state handler
+						if err := sf(); err != nil {
+							log.Printf("[ERROR] state handler for '%v' errored: %v", state, err)
+							w.WriteHeader(http.StatusInternalServerError)
+							return
+						}
+					}
+				}
+
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			log.Println("[DEBUG] skipping state handler for request", r.RequestURI)
+
+			// Pass through to application
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+var messageVerificationHandler = func(messageHandlers MessageHandlers, stateHandlers StateHandlers) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -357,7 +536,12 @@ var messageHandler = func(messageHandlers MessageHandlers, stateHandlers StateHa
 			return
 		}
 
-		json.Unmarshal(body, &message)
+		err = json.Unmarshal(body, &message)
+
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
 		// Setup any provider state
 		for _, state := range message.States {
@@ -460,11 +644,13 @@ func (p *Pact) VerifyMessageProviderRaw(request VerifyMessageRequest) (types.Pro
 		Tags:                       request.Tags,
 		BrokerUsername:             request.BrokerUsername,
 		BrokerPassword:             request.BrokerPassword,
+		BrokerToken:                request.BrokerToken,
 		PublishVerificationResults: request.PublishVerificationResults,
 		ProviderVersion:            request.ProviderVersion,
+		Provider:                   p.Provider,
 	}
 
-	mux.HandleFunc("/", messageHandler(request.MessageHandlers, request.StateHandlers))
+	mux.HandleFunc("/", messageVerificationHandler(request.MessageHandlers, request.StateHandlers))
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -476,14 +662,15 @@ func (p *Pact) VerifyMessageProviderRaw(request VerifyMessageRequest) (types.Pro
 	go http.Serve(ln, mux)
 
 	portErr := waitForPort(port, "tcp", "localhost", p.ClientTimeout,
-		fmt.Sprintf(`Timed out waiting for Daemon on port %d - are you sure it's running?`, port))
+		fmt.Sprintf(`Timed out waiting for pact proxy on port %d - check for errors`, port))
 
 	if portErr != nil {
 		log.Fatal("Error:", err)
 		return response, portErr
 	}
 
-	return p.VerifyProviderRaw(verificationRequest)
+	log.Println("[DEBUG] pact provider verification")
+	return p.pactClient.VerifyProvider(verificationRequest)
 }
 
 // VerifyMessageConsumerRaw creates a new Pact _message_ interaction to build a testable
@@ -532,11 +719,10 @@ func (p *Pact) VerifyMessageConsumerRaw(message *Message, handler MessageConsume
 
 	// If no errors, update Message Pact
 	return p.pactClient.UpdateMessagePact(types.PactMessageRequest{
-		Message:           message,
-		Consumer:          p.Consumer,
-		Provider:          p.Provider,
-		PactFileWriteMode: p.PactFileWriteMode,
-		PactDir:           p.PactDir,
+		Message:  message,
+		Consumer: p.Consumer,
+		Provider: p.Provider,
+		PactDir:  p.PactDir,
 	})
 }
 
@@ -551,3 +737,5 @@ func (p *Pact) VerifyMessageConsumer(t *testing.T, message *Message, handler Mes
 
 	return err
 }
+
+const providerStatesSetupPath = "/__setup"

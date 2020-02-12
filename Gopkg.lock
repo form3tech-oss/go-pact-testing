@@ -85,18 +85,19 @@
   revision = "bb74f1db0675b241733089d5a1faa5dd8b0ef57b"
 
 [[projects]]
-  digest = "1:332eb51d0198ce562b1429d1455852ebde8ef523b8b840228d4b83a41ff77b0b"
+  digest = "1:e75a6c42f347194496a158c98bca3d7f902fa6cc46dada89755f138e57ddb47d"
   name = "github.com/pact-foundation/pact-go"
   packages = [
     "client",
     "dsl",
     "install",
+    "proxy",
     "types",
     "utils",
   ]
   pruneopts = "UT"
-  revision = "6b222e8f6bd14cf7d92a9c7f2a0464ff80af8a67"
-  version = "v1.0.0-beta.2"
+  revision = "7b93cd4d125b96b7dca57518900a92ef5880ea7a"
+  version = "v1.1.0"
 
 [[projects]]
   digest = "1:7231124c9669dfb54b82ef8b89f2735cf5d5d2529a23c6ac93a8c4b8bbb28b28"
