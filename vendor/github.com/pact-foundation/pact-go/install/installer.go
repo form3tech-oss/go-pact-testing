@@ -17,9 +17,9 @@ type Installer struct {
 }
 
 const (
-	mockServiceRange = ">= 2.9.8, < 3.0.0"
-	verifierRange    = ">= 1.15.0, < 3.0.0"
-	brokerRange      = ">= 1.16.0, < 2.0.0"
+	mockServiceRange = ">= 3.5.0, < 4.0.0"
+	verifierRange    = ">= 1.27.1, < 2.0.0"
+	brokerRange      = ">= 1.22.3"
 )
 
 var versionMap = map[string]string{
@@ -82,9 +82,10 @@ func (i *Installer) GetVersionForBinary(binary string) (version string, err erro
 	log.Println("[DEBUG] running binary", binary)
 
 	content, err := i.commander.Output(binary, "version")
-	version = string(content)
+	elements := strings.Split(strings.TrimSpace(string(content)), "\n")
+	version = strings.TrimSpace(elements[len(elements)-1])
 
-	return strings.TrimSpace(version), err
+	return version, err
 }
 
 // commander wraps the exec package, allowing us
