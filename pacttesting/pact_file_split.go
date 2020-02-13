@@ -10,9 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+type PactRequestMatchingFilter = func(map[string]interface{})
+
 //SplitPactBulkFile reads bulk PACT files, splits it into smaller ones
 //and writes output to destination directory
-func SplitPactBulkFile(bulkFilePath string, outputDirPath string) error {
+func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters ...PactRequestMatchingFilter) error {
 	//prepare output directory
 	if _, outputDirErr := os.Stat(outputDirPath); os.IsNotExist(outputDirErr) {
 		if newDirErr := os.MkdirAll(outputDirPath, os.ModePerm); newDirErr != nil {
@@ -34,6 +36,14 @@ func SplitPactBulkFile(bulkFilePath string, outputDirPath string) error {
 		return errors.New("No test cases have been found in file: " + bulkFilePath)
 	}
 	for idx, tc := range *testCases {
+		for _, i := range tc.Interactions {
+			requestMatchingRules, reqTypeOk := i.Request.(map[string]interface{})
+			if reqTypeOk {
+				for _, reqFilter := range requestFilters {
+					reqFilter(requestMatchingRules)
+				}
+			}
+		}
 		json, jsonErr := json.Marshal(tc)
 		if jsonErr != nil {
 			return errors.Wrap(jsonErr, "Couldn't change interaction to test case - interaction idx: "+strconv.Itoa(idx))
