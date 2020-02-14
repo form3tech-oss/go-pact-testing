@@ -107,6 +107,20 @@ func (s *pactTestingStage) no_error_should_be_returned_from_service_b() *pactTes
 	return s
 }
 
+func (s *pactTestingStage) an_error_should_be_returned_from_the_verify() *pactTestingStage {
+
+	assert.Error(s.t, VerifyAll())
+
+	return s
+}
+
+func (s *pactTestingStage) no_error_should_be_returned_from_the_verify() *pactTestingStage {
+
+	assert.NoError(s.t, VerifyAll())
+
+	return s
+}
+
 func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 	VerifyProviderPacts(PactProviderTestParams{
 		Testing:   s.t,
@@ -168,4 +182,8 @@ func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStag
 	assert.NotEqual(s.t, "", viper.GetString("testservice-pre"))
 	assert.Contains(s.t, serverPortMap, "testservice-prego-pact-testing")
 	return s
+}
+
+func (s *pactTestingStage) the_test_panics() {
+	panic("Test Panic")
 }
