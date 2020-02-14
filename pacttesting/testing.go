@@ -46,6 +46,12 @@ type pactServer struct {
 var serverMap = make(map[string]*pactServer)
 var serverPortMap = make(map[string]int)
 
+var defaultRetryOptions = []retry.RetryOption{
+	retry.MaxTries(150000),
+	retry.Sleep(200 * time.Millisecond),
+	retry.Timeout(3 * time.Minute),
+}
+
 func readPactFile(pactFilePath string) *pact {
 	dir, _ := os.Getwd()
 
@@ -181,12 +187,28 @@ func PreassignPorts(pactFilePaths []Pact) {
 
 // Runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
 func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
+	defer func() {
+		for _, pactServer := range serverMap {
+			pactServer.mockServer.DeleteInteractions()
+		}
+	}()
+
 	PreassignPorts(pactFilePaths)
 	buildPactClientOnce()
 
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 
 	dir, _ := os.Getwd()
+
+	for _, server := range serverMap {
+		server.mockServer.DeleteInteractions()
+	}
+
+	// Allow binding to 0.0.0.0 if desired
+	bind := "127.0.0.1"
+	if b := os.Getenv("PACT_BIND_ADDRESS"); len(b) > 0 {
+		bind = b
+	}
 
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
@@ -205,6 +227,8 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 				p.Provider.Name,
 				"--pact-file-write-mode",
 				"merge",
+				"--host",
+				bind,
 			}
 
 			log.Infof("starting new mock server for consumer: %s, provider: %s", p.Consumer.Name, p.Provider.Name)
@@ -212,7 +236,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 			// This exists because we've called PreassignPorts
 			port := serverPortMap[key]
 			server := pactClient.StartServer(args, port)
-			serverAddress := fmt.Sprintf("http://localhost:%d", port)
+			serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
 			mockServer := &MockServer{
 				BaseURL:  serverAddress,
 				Consumer: p.Consumer.Name,
@@ -223,7 +247,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 		}
 
 		for _, i := range p.Interactions {
-			err := serverMap[p.Provider.Name+p.Consumer.Name].mockServer.AddInteraction(i)
+			err := serverMap[key].mockServer.AddInteraction(i)
 			if err != nil {
 				log.Fatalf("Error adding pact: %v", err)
 				panic(err)
@@ -233,41 +257,53 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 
 	testFunc()
 
-	for _, pactServer := range serverMap {
-		pactServer.mockServer.DeleteInteractions()
-	}
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
-func IntegrationTest(pactFilePaths []Pact, testFunc func()) {
+func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.RetryOption) {
 	TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
 		verify := func() error {
-			for _, pactServer := range serverMap {
+			pacts := groupByProvider(readAllPacts(pactFilePaths))
+			for _, p := range pacts { //verify only pacts defined for this TC
+				key := p.Provider.Name + p.Consumer.Name
+				pactServer := serverMap[key]
 				err := pactServer.mockServer.Verify()
 
 				if err != nil {
 					return fmt.Errorf("pact verification failed: %v", err)
 				}
-				log.Infof("pacts verified successfully")
 			}
+			log.Infof("Pacts verified successfully!")
 			return nil
 		}
 
-		err := retry.Do(verify, retry.MaxTries(150000), retry.Sleep(200*time.Millisecond), retry.Timeout(3*time.Minute))
-
-		if err != nil {
+		// (Re-)try verification according to the specified options (if any).
+		// If no options are specified, defaults are used.
+		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
+		if len(retryOptions) == 0 {
+			retryOptions = defaultRetryOptions
+		}
+		if err := retry.Do(verify, retryOptions...); err != nil {
 			log.Fatalf("Pact verification failed!! For more info on the error check the logs/pact.log file it is quite detailed")
 		}
 	})
 }
 
 func StopMockServers() {
-
 	for _, pactServer := range serverMap {
 		pactClient.StopServer(pactServer.server)
 	}
+}
+
+func VerifyAll() error {
+	for _, s := range serverMap {
+		if err := s.mockServer.Verify(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type PactProviderTestParams struct {

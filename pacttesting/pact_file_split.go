@@ -44,6 +44,7 @@ func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters
 				}
 			}
 		}
+
 		json, jsonErr := json.Marshal(tc)
 		if jsonErr != nil {
 			return errors.Wrap(jsonErr, "Couldn't change interaction to test case - interaction idx: "+strconv.Itoa(idx))

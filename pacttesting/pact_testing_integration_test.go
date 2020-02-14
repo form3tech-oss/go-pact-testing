@@ -114,6 +114,26 @@ func TestProvider_Should_Split_Bulk_File(t *testing.T) {
 
 }
 
+func TestAcc_verify_all(t *testing.T) {
+	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
+
+		given, when, then := PactTestingTest(t)
+
+		given.
+			the_test_is_using_a_single_pact().and().
+			an_error_should_be_returned_from_the_verify()
+
+		when.
+			the_pact_for_service_a_is_called()
+
+		then.
+			the_response_for_service_a_should_be_200_ok().and().
+			no_error_should_be_returned_from_the_verify()
+
+	})
+
+}
+
 func TestAcc_Preassign_Ports(t *testing.T) {
 
 	given, when, then := PactTestingTest(t)
@@ -127,6 +147,29 @@ func TestAcc_Preassign_Ports(t *testing.T) {
 	then.
 		the_service_has_a_preassigned_port()
 
+}
+
+func TestAcc_verify_pact_with_single_pact_interactions_are_deleted(t *testing.T) {
+	defer func() {
+		if err := recover(); err != nil {
+			// API CAll to check if verifications = 200
+			if VerifyAll() != nil {
+				t.Fatal("Expected no interactions to be verified")
+			}
+		} else {
+			t.Fatal("was expecting error")
+		}
+	}()
+
+	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
+
+		given, when, _ := PactTestingTest(t)
+
+		given.
+			the_test_is_using_a_single_pact()
+		when.
+			the_test_panics()
+	})
 }
 
 func TestMain(m *testing.M) {
