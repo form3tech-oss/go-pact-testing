@@ -45,7 +45,7 @@ pact-publish-verification: pact-test-config
 You need to add the following lines to your `.gitignore`
 
 ```
-pact.log
+pact-*.log
 pact/
 build/
 ```

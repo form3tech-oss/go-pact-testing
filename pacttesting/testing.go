@@ -220,7 +220,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 				"--pact-dir",
 				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "target"))),
 				"--log",
-				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "logs")) + "/" + "pact.log"),
+				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "logs")) + "/" + "pact-" + p.Provider.Name + ".log"),
 				"--consumer",
 				p.Consumer.Name,
 				"--provider",
@@ -286,7 +286,7 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 			retryOptions = defaultRetryOptions
 		}
 		if err := retry.Do(verify, retryOptions...); err != nil {
-			log.Fatalf("Pact verification failed!! For more info on the error check the logs/pact.log file it is quite detailed")
+			log.Fatalf("Pact verification failed! For more info on the error check the logs/pact*.log files, they are quite detailed")
 		}
 	})
 }
