@@ -55,17 +55,29 @@ func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducer
 			})
 
 			// report the results using the test framework
-			for _, example := range response.Examples {
-				testSuccessful := t.Run(example.Description, func(st *testing.T) {
-					st.Log(example.FullDescription)
-					if example.Status != "passed" {
-						st.Errorf("%s\n", example.Exception.Message)
-						st.Error("Check to ensure that all message expectations have corresponding message handlers")
-					} else {
-						st.Log(example.FullDescription)
+			for _, test := range response {
+				for _, notice := range test.Summary.Notices {
+					if notice.When == "before_verification" {
+						t.Logf("notice: %s", notice.Text)
 					}
-				})
-				allTestsSucceeded = allTestsSucceeded && testSuccessful
+				}
+				for _, example := range test.Examples {
+					testSuccessful := t.Run(example.Description, func(st *testing.T) {
+						st.Log(example.FullDescription)
+						if example.Status != "passed" {
+							st.Errorf("%s\n", example.Exception.Message)
+							st.Error("Check to ensure that all message expectations have corresponding message handlers")
+						} else {
+							st.Log(example.FullDescription)
+						}
+					})
+					allTestsSucceeded = allTestsSucceeded && testSuccessful
+				}
+				for _, notice := range test.Summary.Notices {
+					if notice.When == "after_verification" {
+						t.Logf("notice: %s", notice.Text)
+					}
+				}
 			}
 
 			if err != nil {
@@ -165,8 +177,8 @@ var messageHandler = func(messageHandlers dsl.MessageHandlers, stateHandlers dsl
 }
 
 // VerifyMessageProviderRaw runs provider message verification.
-func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyMessageRequest) (types.ProviderVerifierResponse, error) {
-	response := types.ProviderVerifierResponse{}
+func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyMessageRequest) ([]types.ProviderVerifierResponse, error) {
+	response := []types.ProviderVerifierResponse{}
 
 	// Starts the message wrapper API with hooks back to the message handlers
 	// This maps the 'description' field of a message pact, to a function handler

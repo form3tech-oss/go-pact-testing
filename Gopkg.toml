@@ -35,4 +35,4 @@
 
 [[constraint]]
   name = "github.com/pact-foundation/pact-go"
-  version = "v1.1.0"
+  version = "1.3.0"

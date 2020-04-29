@@ -85,7 +85,7 @@
   revision = "bb74f1db0675b241733089d5a1faa5dd8b0ef57b"
 
 [[projects]]
-  digest = "1:e75a6c42f347194496a158c98bca3d7f902fa6cc46dada89755f138e57ddb47d"
+  digest = "1:da3741230349cb4381a1d27ed0ca6cb131c3e1b1a53312dc93dad69de7a4dce5"
   name = "github.com/pact-foundation/pact-go"
   packages = [
     "client",
@@ -96,8 +96,8 @@
     "utils",
   ]
   pruneopts = "UT"
-  revision = "7b93cd4d125b96b7dca57518900a92ef5880ea7a"
-  version = "v1.1.0"
+  revision = "d5b427998d53d8d93d05fb683741213cdce2e9a3"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:7231124c9669dfb54b82ef8b89f2735cf5d5d2529a23c6ac93a8c4b8bbb28b28"

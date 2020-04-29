@@ -359,17 +359,31 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 
 			response, verifyErr := pactClient.VerifyProvider(request)
 			allTestsSucceeded := true
-			for _, example := range response.Examples {
-				if !t.Run(example.Description, func(st *testing.T) {
-					if example.Status != "passed" {
-						st.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
-					} else {
-						st.Log(example.FullDescription)
+			for _, test := range response {
+				for _, notice := range test.Summary.Notices {
+					if notice.When == "before_verification" {
+						t.Logf("notice: %s", notice.Text)
 					}
-				}) {
-					allTestsSucceeded = false
 				}
 
+				for _, example := range test.Examples {
+					if !t.Run(example.Description, func(st *testing.T) {
+						if example.Status != "passed" {
+							st.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
+						} else {
+							st.Log(example.FullDescription)
+						}
+					}) {
+						allTestsSucceeded = false
+					}
+
+				}
+
+				for _, notice := range test.Summary.Notices {
+					if notice.When == "after_verification" {
+						t.Logf("notice: %s", notice.Text)
+					}
+				}
 			}
 
 			t.Run("==> Writing verification.json", func(t *testing.T) {
