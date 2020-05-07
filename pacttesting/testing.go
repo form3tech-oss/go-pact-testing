@@ -186,7 +186,7 @@ func PreassignPorts(pactFilePaths []Pact) {
 }
 
 // Runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
-func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
+func TestWithStubServices(pactFilePaths []Pact, testFunc func(), fileSuffixes ...string) {
 	defer func() {
 		for _, pactServer := range serverMap {
 			pactServer.mockServer.DeleteInteractions()
@@ -210,7 +210,16 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 		bind = b
 	}
 
+	var fileName string
+	if len(fileSuffixes) > 0 {
+		fileName = "pact-" + strings.Join(fileSuffixes, "-") + ".log"
+	}
+
 	for _, p := range pacts {
+		if len(fileSuffixes) == 0 {
+			fileName = "pact-" + p.Provider.Name + ".log"
+		}
+
 		key := p.Provider.Name + p.Consumer.Name
 		_, ok := serverMap[key]
 		if !ok {
@@ -220,7 +229,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 				"--pact-dir",
 				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "target"))),
 				"--log",
-				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "logs")) + "/" + "pact-" + p.Provider.Name + ".log"),
+				filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "logs")) + "/" + fileName),
 				"--consumer",
 				p.Consumer.Name,
 				"--provider",
@@ -260,35 +269,14 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
+// and saves any errors on pact logs suffixed with test name
+func IntegrationTestWithName(testName string, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.RetryOption) {
+	TestWithStubServices(pactFilePaths, getTestFunc(pactFilePaths, testFunc, retryOptions...), testName)
+}
+
+// Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
 func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.RetryOption) {
-	TestWithStubServices(pactFilePaths, func() {
-		testFunc()
-
-		verify := func() error {
-			pacts := groupByProvider(readAllPacts(pactFilePaths))
-			for _, p := range pacts { //verify only pacts defined for this TC
-				key := p.Provider.Name + p.Consumer.Name
-				pactServer := serverMap[key]
-				err := pactServer.mockServer.Verify()
-
-				if err != nil {
-					return fmt.Errorf("pact verification failed: %v", err)
-				}
-			}
-			log.Infof("Pacts verified successfully!")
-			return nil
-		}
-
-		// (Re-)try verification according to the specified options (if any).
-		// If no options are specified, defaults are used.
-		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
-		if len(retryOptions) == 0 {
-			retryOptions = defaultRetryOptions
-		}
-		if err := retry.Do(verify, retryOptions...); err != nil {
-			log.Fatalf("Pact verification failed! For more info on the error check the logs/pact*.log files, they are quite detailed")
-		}
-	})
+	TestWithStubServices(pactFilePaths, getTestFunc(pactFilePaths, testFunc, retryOptions...))
 }
 
 func StopMockServers() {
@@ -398,5 +386,36 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 				t.Fatal(verifyErr)
 			}
 		})
+	}
+}
+
+func getTestFunc(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.RetryOption) func() {
+	return func() {
+		testFunc()
+
+		verify := func() error {
+			pacts := groupByProvider(readAllPacts(pactFilePaths))
+			for _, p := range pacts { //verify only pacts defined for this TC
+				key := p.Provider.Name + p.Consumer.Name
+				pactServer := serverMap[key]
+				err := pactServer.mockServer.Verify()
+
+				if err != nil {
+					return fmt.Errorf("pact verification failed: %v", err)
+				}
+			}
+			log.Infof("Pacts verified successfully!")
+			return nil
+		}
+
+		// (Re-)try verification according to the specified options (if any).
+		// If no options are specified, defaults are used.
+		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
+		if len(retryOptions) == 0 {
+			retryOptions = defaultRetryOptions
+		}
+		if err := retry.Do(verify, retryOptions...); err != nil {
+			log.Fatalf("Pact verification failed! For more info on the error check the logs/pact*.log files, they are quite detailed")
+		}
 	}
 }
