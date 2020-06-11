@@ -181,7 +181,7 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 
 	// Construct verifier request
 	verificationRequest := types.VerifyRequest{
-		ProviderBaseURL:            fmt.Sprintf("http://localhost:%d", port),
+		ProviderBaseURL:            fmt.Sprintf("http://%s:%d", getBindAddress(), port),
 		PactURLs:                   request.PactURLs,
 		BrokerURL:                  request.BrokerURL,
 		Tags:                       request.Tags,
@@ -195,7 +195,7 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 
 	mux.HandleFunc("/", messageHandler(request.MessageHandlers, request.StateHandlers))
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", getBindAddress(), port))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 	log.Printf("[DEBUG] API handler starting: port %d (%s)", port, ln.Addr())
 	go http.Serve(ln, mux)
 
-	portErr := waitForPort(port, "tcp", "localhost", 5*time.Second,
+	portErr := waitForPort(port, "tcp", getBindAddress(), 5*time.Second,
 		fmt.Sprintf(`Timed out waiting for Daemon on port %d - are you sure it's running?`, port))
 
 	if portErr != nil {
@@ -224,7 +224,7 @@ var waitForPort = func(port int, network string, address string, timeoutDuration
 		select {
 		case <-timeout:
 			log.Printf("[ERROR] Expected server to start < %s. %s", timeoutDuration, message)
-			return fmt.Errorf("Expected server to start < %s. %s", timeoutDuration, message)
+			return fmt.Errorf("expected server to start < %s. %s", timeoutDuration, message)
 		case <-time.After(50 * time.Millisecond):
 			_, err := net.Dial(network, fmt.Sprintf("%s:%d", address, port))
 			if err == nil {

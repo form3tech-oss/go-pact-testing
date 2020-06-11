@@ -179,7 +179,7 @@ func PreassignPorts(pactFilePaths []Pact) {
 				panic(err)
 			}
 			serverPortMap[key] = port
-			serverAddress := fmt.Sprintf("http://localhost:%d", port)
+			serverAddress := fmt.Sprintf("http://%s:%d", getBindAddress(), port)
 			viper.Set(p.Provider.Name, serverAddress)
 		}
 	}
@@ -205,10 +205,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 	}
 
 	// Allow binding to 0.0.0.0 if desired
-	bind := "127.0.0.1"
-	if b := os.Getenv("PACT_BIND_ADDRESS"); len(b) > 0 {
-		bind = b
-	}
+	bind := getBindAddress()
 
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
@@ -399,4 +396,13 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 			}
 		})
 	}
+}
+
+func getBindAddress() string {
+	// Allow binding to 0.0.0.0 if desired
+	bind := "127.0.0.1"
+	if b := os.Getenv("PACT_BIND_ADDRESS"); len(b) > 0 {
+		bind = b
+	}
+	return bind
 }
