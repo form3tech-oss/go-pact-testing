@@ -1,6 +1,6 @@
 language: go
 go:
-- 1.9.x
+- 1.14.x
 install:
 - if [[ -a .git/shallow ]]; then git fetch --unshallow --tags; fi
 - go get golang.org/x/tools/cmd/goimports
