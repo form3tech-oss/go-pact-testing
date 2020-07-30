@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -32,7 +33,7 @@ type Client interface {
 	RemoveAllServers(server *types.MockServer) []*types.MockServer
 
 	// VerifyProvider runs the verification process against a running Provider.
-	VerifyProvider(request types.VerifyRequest) (types.ProviderVerifierResponse, error)
+	VerifyProvider(request types.VerifyRequest) ([]types.ProviderVerifierResponse, error)
 
 	// UpdateMessagePact adds a pact message to a contract file
 	UpdateMessagePact(request types.PactMessageRequest) error
@@ -143,9 +144,9 @@ func (p *PactClient) RemoveAllServers(server *types.MockServer) []*types.MockSer
 
 // VerifyProvider runs the verification process against a running Provider.
 // TODO: extract/refactor the stdout/error streaems from these functions
-func (p *PactClient) VerifyProvider(request types.VerifyRequest) (types.ProviderVerifierResponse, error) {
+func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.ProviderVerifierResponse, error) {
 	log.Println("[DEBUG] client: verifying a provider")
-	var response types.ProviderVerifierResponse
+	response := make([]types.ProviderVerifierResponse, 0)
 
 	// Convert request into flags, and validate request
 	err := request.Validate()
@@ -179,24 +180,43 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) (types.Provider
 	if err != nil {
 		return response, err
 	}
+
+	// Buffered channel: wait for all reading to complete
+	done := make(chan struct{}, 2)
+	verifications := []string{}
+	var stdErr strings.Builder
+
+	// Split by lines, as the content is JSONL formatted
+	// Each pact is verified by line, and the results (as JSON) sent to stdout.
+	// See https://github.com/pact-foundation/pact-go/issues/88#issuecomment-404686337
+	stdOutScanner := bufio.NewScanner(stdOutPipe)
+	go func() {
+		for stdOutScanner.Scan() {
+			verifications = append(verifications, stdOutScanner.Text())
+		}
+
+		done <- struct{}{}
+	}()
+
+	// Scrape errors
+	stdErrScanner := bufio.NewScanner(stdErrPipe)
+	go func() {
+		for stdErrScanner.Scan() {
+			stdErr.WriteString(fmt.Sprintf("%s\n", stdErrScanner.Text()))
+		}
+
+		done <- struct{}{}
+	}()
+
 	err = cmd.Start()
 	if err != nil {
 		return response, err
 	}
-	stdOut, err := ioutil.ReadAll(stdOutPipe)
-	if err != nil {
-		return response, err
-	}
-	stdErr, err := ioutil.ReadAll(stdErrPipe)
-	if err != nil {
-		return response, err
-	}
+
+	// Wait for watch goroutine before Cmd.Wait(), race condition!
+	<-done
 
 	err = cmd.Wait()
-
-	// Split by lines, as the content is now JSONL
-	// See https://github.com/pact-foundation/pact-go/issues/88#issuecomment-404686337
-	verifications := strings.Split(string(stdOut), "\n")
 
 	var verification types.ProviderVerifierResponse
 	for _, v := range verifications {
@@ -209,7 +229,7 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) (types.Provider
 		if v != "" && strings.Index(v, "INFO") != 0 {
 			dErr := json.Unmarshal([]byte(v), &verification)
 
-			response.Examples = append(response.Examples, verification.Examples...)
+			response = append(response, verification)
 
 			if dErr != nil {
 				err = dErr
@@ -221,7 +241,7 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) (types.Provider
 		return response, err
 	}
 
-	return response, fmt.Errorf("error verifying provider: %s\n\nSTDERR:\n%s\n\nSTDOUT:\n%s", err, stdErr, stdOut)
+	return response, fmt.Errorf("error verifying provider: %s\n\nSTDERR:\n%s\n\nSTDOUT:\n%s", err, stdErr.String(), strings.Join(verifications, "\n"))
 }
 
 // UpdateMessagePact adds a pact message to a contract file

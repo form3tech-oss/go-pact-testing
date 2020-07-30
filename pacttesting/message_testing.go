@@ -49,50 +49,52 @@ func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducer
 			allTestsSucceeded := true
 
 			// perform the verification
-			response, err := VerifyMessageProviderRaw(params, dsl.VerifyMessageRequest{
+			responses, err := VerifyMessageProviderRaw(params, dsl.VerifyMessageRequest{
 				PactURLs:        []string{url},
 				MessageHandlers: messageProducers,
 			})
 
 			// report the results using the test framework
-			for _, example := range response.Examples {
-				testSuccessful := t.Run(example.Description, func(st *testing.T) {
-					st.Log(example.FullDescription)
-					if example.Status != "passed" {
-						st.Errorf("%s\n", example.Exception.Message)
-						st.Error("Check to ensure that all message expectations have corresponding message handlers")
-					} else {
+			for _, response := range responses {
+				for _, example := range response.Examples {
+					testSuccessful := t.Run(example.Description, func(st *testing.T) {
 						st.Log(example.FullDescription)
-					}
-				})
-				allTestsSucceeded = allTestsSucceeded && testSuccessful
-			}
-
-			if err != nil {
-				t.Errorf("Error verifying message provider: %s", err)
-			}
-
-			t.Run("==> Writing verification.json", func(t *testing.T) {
-				verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
-					err == nil && allTestsSucceeded,
-					version)
-				verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-				_ = os.MkdirAll(verificationDir+"/", 0744)
-				verificationFile := filepath.Join(verificationDir, filename)
-				if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
-					t.Fatal(err)
+						if example.Status != "passed" {
+							st.Errorf("%s\n", example.Exception.Message)
+							st.Error("Check to ensure that all message expectations have corresponding message handlers")
+						} else {
+							st.Log(example.FullDescription)
+						}
+					})
+					allTestsSucceeded = allTestsSucceeded && testSuccessful
 				}
-				outputJson, err := json.Marshal(response)
 
 				if err != nil {
-					t.Fatal(err)
+					t.Errorf("Error verifying message provider: %s", err)
 				}
 
-				outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-				if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
-					t.Fatal(err)
-				}
-			})
+				t.Run("==> Writing verification.json", func(t *testing.T) {
+					verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
+						err == nil && allTestsSucceeded,
+						version)
+					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
+					_ = os.MkdirAll(verificationDir+"/", 0744)
+					verificationFile := filepath.Join(verificationDir, filename)
+					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
+						t.Fatal(err)
+					}
+					outputJson, err := json.Marshal(response)
+
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
+					if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
 
 		})
 	}
@@ -165,8 +167,8 @@ var messageHandler = func(messageHandlers dsl.MessageHandlers, stateHandlers dsl
 }
 
 // VerifyMessageProviderRaw runs provider message verification.
-func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyMessageRequest) (types.ProviderVerifierResponse, error) {
-	response := types.ProviderVerifierResponse{}
+func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyMessageRequest) ([]types.ProviderVerifierResponse, error) {
+	response := []types.ProviderVerifierResponse{}
 
 	// Starts the message wrapper API with hooks back to the message handlers
 	// This maps the 'description' field of a message pact, to a function handler
