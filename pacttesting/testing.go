@@ -354,42 +354,45 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 				ProviderStatesSetupURL: params.ProviderStateSetupURL,
 			}
 
-			response, verifyErr := pactClient.VerifyProvider(request)
+			responses, verifyErr := pactClient.VerifyProvider(request)
 			allTestsSucceeded := true
-			for _, example := range response.Examples {
-				if !t.Run(example.Description, func(st *testing.T) {
-					if example.Status != "passed" {
-						st.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
-					} else {
-						st.Log(example.FullDescription)
+
+			for _, response := range responses {
+				for _, example := range response.Examples {
+					if !t.Run(example.Description, func(st *testing.T) {
+						if example.Status != "passed" {
+							st.Errorf("%s\n%s\n", example.FullDescription, example.Exception.Message)
+						} else {
+							st.Log(example.FullDescription)
+						}
+					}) {
+						allTestsSucceeded = false
 					}
-				}) {
-					allTestsSucceeded = false
+
 				}
 
+				t.Run("==> Writing verification.json", func(t *testing.T) {
+					verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
+						allTestsSucceeded,
+						version)
+					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
+					_ = os.MkdirAll(verificationDir+"/", 0744)
+					verificationFile := filepath.Join(verificationDir, filename)
+					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
+						t.Fatal(err)
+					}
+					outputJson, err := json.Marshal(response)
+
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
+					if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
+						t.Fatal(err)
+					}
+				})
 			}
-
-			t.Run("==> Writing verification.json", func(t *testing.T) {
-				verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
-					allTestsSucceeded,
-					version)
-				verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-				_ = os.MkdirAll(verificationDir+"/", 0744)
-				verificationFile := filepath.Join(verificationDir, filename)
-				if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
-					t.Fatal(err)
-				}
-				outputJson, err := json.Marshal(response)
-
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-				if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
-					t.Fatal(err)
-				}
-			})
 
 			if verifyErr != nil {
 				t.Fatal(verifyErr)
