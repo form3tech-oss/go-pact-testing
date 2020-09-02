@@ -6,6 +6,9 @@ github.com/fsnotify/fsnotify
 # github.com/giantswarm/retry-go v0.0.0-20151203102909-d78cea247d5e
 ## explicit
 github.com/giantswarm/retry-go
+# github.com/google/uuid v1.1.2
+## explicit
+github.com/google/uuid
 # github.com/hashicorp/go-version v1.2.1
 ## explicit
 github.com/hashicorp/go-version

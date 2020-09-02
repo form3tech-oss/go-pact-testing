@@ -6,10 +6,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"testing"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ type pactFileSplitStage struct {
 func tempDirectory(t *testing.T) string {
 	dir, err := ioutil.TempDir(
 		os.TempDir(),
-		strconv.FormatInt(time.Now().Unix(), 10),
+		uuid.New().String(),
 	)
 
 	if err != nil {
@@ -142,13 +142,17 @@ func (s *pactFileSplitStage) split_files_count_is(count int) *pactFileSplitStage
 	return s
 }
 
-func (s *pactFileSplitStage) split_file_exist(filename string) *pactFileSplitStage {
-	var filenames []string
+func (s *pactFileSplitStage) split_files_by_prefix_count_is(prefix string, count int) *pactFileSplitStage {
+	var matchFiles []string
 	for _, pactFile := range s.splitPactFiles {
-		filenames = append(filenames, filepath.Base(pactFile))
+		if !strings.HasPrefix(filepath.Base(pactFile), prefix) {
+			continue
+		}
+
+		matchFiles = append(matchFiles, pactFile)
 	}
 
-	s.assert.Containsf(filenames, filename, "file %s doesn't exist in %s directory", filename, s.splitPactsDir)
+	s.assert.Len(matchFiles, count)
 
 	return s
 }
