@@ -61,7 +61,7 @@ func readPactFile(pactFilePath string) *pact {
 	} else {
 		file = fmt.Sprintf("%s.json", pactFilePath)
 	}
-	path := filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "testdata", "pacts", file)))
+	path := filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "pacts", file)))
 
 	pactString, err := ioutil.ReadFile(path)
 
