@@ -51,7 +51,7 @@ func (s *pactMessageTestingStage) message_producers_are_configured() *pactMessag
 func (s *pactMessageTestingStage) messages_are_verified_against_pacts() {
 	VerifyProviderMessagingPacts(PactProviderTestParams{
 		Testing:   s.t,
-		Pacts:     "pacttesting/messagepacts/*.json",
+		Pacts:     "pacttesting/testdata/messagepacts/*.json",
 		AuthToken: "Hello",
 	}, s.messageProducers)
 }

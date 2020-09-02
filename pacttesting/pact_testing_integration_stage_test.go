@@ -61,7 +61,7 @@ func (s *pactTestingStage) parsePactFile(fileName string) *PactFile {
 
 func (s *pactTestingStage) a_bulk_pact_file() *pactTestingStage {
 	wd, _ := os.Getwd()
-	s.pactFilePath = filepath.Join(wd, "pacts/testservices.get.bulk.test.json")
+	s.pactFilePath = filepath.Join(wd, "testdata/pacts/testservices.get.bulk.test.json")
 	s.pactFile = s.parsePactFile(s.pactFilePath)
 	return s
 }
@@ -124,7 +124,7 @@ func (s *pactTestingStage) no_error_should_be_returned_from_the_verify() *pactTe
 func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 	VerifyProviderPacts(PactProviderTestParams{
 		Testing:   s.t,
-		Pacts:     "pacttesting/providerpacts/*.json",
+		Pacts:     "pacttesting/testdata/providerpacts/*.json",
 		AuthToken: "anything",
 		BaseURL:   fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")),
 	})
