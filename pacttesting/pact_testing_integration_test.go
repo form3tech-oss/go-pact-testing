@@ -99,21 +99,6 @@ func TestProvider_Verification_Success(t *testing.T) {
 
 }
 
-func TestProvider_Should_Split_Bulk_File(t *testing.T) {
-
-	given, when, then := PactTestingTest(t)
-
-	given.
-		a_bulk_pact_file()
-
-	when.
-		file_is_split()
-
-	then.
-		many_small_pact_files_are_created()
-
-}
-
 func TestAcc_verify_all(t *testing.T) {
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
 

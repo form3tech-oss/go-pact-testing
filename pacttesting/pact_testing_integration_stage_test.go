@@ -1,17 +1,13 @@
 package pacttesting
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
-
-	"fmt"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -24,9 +20,8 @@ type pactTestingStage struct {
 	responseA *http.Response
 	responseB *http.Response
 
-	pactFilePath   string
-	pactFile       *PactFile
-	splitPactFiles []*PactFile
+	pactFilePath string
+	pactFile     *PactFile
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
@@ -57,13 +52,6 @@ func (s *pactTestingStage) parsePactFile(fileName string) *PactFile {
 		log.Fatal("Couldn't parse PACT file: ", fileName, ", error: ", pactFileErr.Error())
 	}
 	return pactFile
-}
-
-func (s *pactTestingStage) a_bulk_pact_file() *pactTestingStage {
-	wd, _ := os.Getwd()
-	s.pactFilePath = filepath.Join(wd, "testdata/pacts/testservices.get.bulk.test.json")
-	s.pactFile = s.parsePactFile(s.pactFilePath)
-	return s
 }
 
 func (s *pactTestingStage) the_pact_for_service_a_is_called() *pactTestingStage {
@@ -129,29 +117,6 @@ func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 		BaseURL:   fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")),
 	})
 
-	return s
-}
-
-func (s *pactTestingStage) file_is_split() *pactTestingStage {
-	testCaseDir := filepath.Join(os.TempDir(), time.Now().String())
-	if err := SplitPactBulkFile(s.pactFilePath, testCaseDir); err != nil {
-		log.Fatal("Couldn't split bulk files: ", err)
-	}
-	files, _ := filepath.Glob(filepath.Join(testCaseDir, "*.json"))
-	s.splitPactFiles = make([]*PactFile, 0)
-	for _, f := range files {
-		s.splitPactFiles = append(s.splitPactFiles, s.parsePactFile(f))
-	}
-	return s
-}
-
-func (s *pactTestingStage) many_small_pact_files_are_created() *pactTestingStage {
-	assert.Equal(s.t, 2, len(s.splitPactFiles), "Not all tests cases have been created")
-	for _, f := range s.splitPactFiles {
-		assert.Equal(s.t, 1, len(f.Interactions), "Each test case should have only one interaction")
-	}
-	assert.Equal(s.t, "Request for a test endpoint A", s.splitPactFiles[0].Interactions[0].Description)
-	assert.Equal(s.t, "Request for a test endpoint B", s.splitPactFiles[1].Interactions[0].Description)
 	return s
 }
 
