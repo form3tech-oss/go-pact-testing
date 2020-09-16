@@ -7,7 +7,6 @@ GOFMT_FILES?=$$(find ./ -name '*.go' | grep -v vendor)
 
 default: build test
 
-
 ifeq (${platform},Darwin)
 pact_filename := "pact-${pact_version}-osx.tar.gz"
 else
@@ -40,11 +39,9 @@ vet:
 	fi
 
 goimports:
-goimports:
 	goimports -w $(GOFMT_FILES)
 
 goimportscheck:
 	@sh -c "'$(CURDIR)/scripts/goimportscheck.sh'"
-
 
 .PHONY: build test vet goimports goimportscheck errcheck package

@@ -136,3 +136,13 @@ func TestPactProviders(t *testing.T) {
 
 }
 ```
+
+`pacttesting.SplitPactBulkFile` prefixes the output filenames with `consumer-provider` and suffixes with `UUID`.
+
+#### Why prefix the output filenames with the `{consumer}-{provider}`?
+
+To easily distinguish between interactions from different consumer-provider pairs.
+
+#### Why suffix the output filenames with UUID?
+
+UUID ensures uniqueness if the descriptions across interactions are not unique. Otherwise, the interaction with a duplicated name would overwrite the previously created file = we would miss (at least) one interaction after splitting.

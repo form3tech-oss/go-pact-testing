@@ -4,6 +4,13 @@ import (
 	"encoding/json"
 )
 
+type PactFileInteraction struct {
+	Description    string      `json:"description"`
+	ProviderStates interface{} `json:"providerStates"`
+	Request        interface{} `json:"request"`
+	Response       interface{} `json:"response"`
+}
+
 //PactFile describes expectations between provider and consumer
 type PactFile struct {
 	Provider struct {
@@ -12,13 +19,8 @@ type PactFile struct {
 	Consumer struct {
 		Name string `json:"name"`
 	} `json:"consumer"`
-	Interactions []struct {
-		Description    string      `json:"description"`
-		ProviderStates interface{} `json:"providerStates"`
-		Request        interface{} `json:"request"`
-		Response       interface{} `json:"response"`
-	} `json:"interactions"`
-	Metadata interface{} `json:"metadata"`
+	Interactions []PactFileInteraction `json:"interactions"`
+	Metadata     interface{}           `json:"metadata"`
 }
 
 //NewPactFile create new PACT file representation
