@@ -1,6 +1,7 @@
 package pacttesting
 
 import (
+	"github.com/pact-foundation/pact-go/dsl"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -30,6 +31,15 @@ type pactTestingStage struct {
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
+	s := &pactTestingStage{
+		t: t,
+	}
+
+	return s, s, s
+}
+
+func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
+	ResetPacts()
 	s := &pactTestingStage{
 		t: t,
 	}
@@ -186,4 +196,32 @@ func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStag
 
 func (s *pactTestingStage) the_test_panics() {
 	panic("Test Panic")
+}
+func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStage {
+	AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Interaction{}).
+		UponReceiving("Request for a test endpoint A").
+		WithRequest(dsl.Request{
+			Method: "GET",
+			Path:   dsl.String("/v1/test"),
+		}).
+		WillRespondWith(dsl.Response{
+			Status:  200,
+			Headers: dsl.MapMatcher{"Content-Type": dsl.String("application/json; charset=utf-8")},
+			Body:    map[string]string{"foo": "bar"},
+		}))
+	return s
+}
+
+func (s *pactTestingStage) test_service_a_returns_200_for_get_from_file() *pactTestingStage {
+	AddPact(s.t, "testservicea.get.test")
+	return s
+}
+
+func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
+	return s.the_pact_for_service_a_is_called()
+}
+
+func (s *pactTestingStage) test_service_a_was_invoked() *pactTestingStage {
+	VerifyInteractions(s.t, "testservicea", "go-pact-testing")
+	return s
 }

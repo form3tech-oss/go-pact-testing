@@ -7,7 +7,6 @@ import (
 
 func TestAcc_verify_pact_with_single_pact(t *testing.T) {
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
-
 		given, when, then := PactTestingTest(t)
 
 		given.
@@ -19,9 +18,33 @@ func TestAcc_verify_pact_with_single_pact(t *testing.T) {
 		then.
 			the_response_for_service_a_should_be_200_ok().and().
 			no_error_should_be_returned_from_service_a()
-
 	})
+}
 
+func TestAcc_verify_pact_with_single_pact_dsl(t *testing.T) {
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		test_service_a_returns_200_for_get()
+
+	when. // mock servers started before here
+		test_service_a_is_called()
+
+	then.
+		test_service_a_was_invoked() // verify pacts are called
+}
+
+func TestAcc_verify_pact_with_single_pact_file(t *testing.T) {
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		test_service_a_returns_200_for_get_from_file()
+
+	when. // mock servers started before here
+		test_service_a_is_called()
+
+	then.
+		test_service_a_was_invoked() // verify pacts are called
 }
 
 func TestAcc_verify_two_pacts_from_two_providers(t *testing.T) {
