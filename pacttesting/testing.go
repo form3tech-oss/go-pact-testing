@@ -1,20 +1,17 @@
 package pacttesting
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"os"
+	c "os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"bytes"
-	c "os/exec"
 	"sync"
-
 	"testing"
+	"time"
 
 	retry "github.com/giantswarm/retry-go"
 	"github.com/pact-foundation/pact-go/dsl"
@@ -22,6 +19,7 @@ import (
 	"github.com/phayes/freeport"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 type Pact = string
@@ -231,7 +229,6 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 // AddPact loads a pact definition from a file and ensures that stub servers are running.
 func AddPact(t *testing.T, filename string) {
 	pactFilePaths := []string{filename}
-	PreassignPorts(pactFilePaths)
 	buildPactClientOnce()
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 	for _, p := range pacts {

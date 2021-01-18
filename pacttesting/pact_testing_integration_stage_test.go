@@ -1,7 +1,7 @@
 package pacttesting
 
 import (
-	"github.com/pact-foundation/pact-go/dsl"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"fmt"
-
+	"github.com/pact-foundation/pact-go/dsl"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
