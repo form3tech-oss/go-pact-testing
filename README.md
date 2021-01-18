@@ -88,6 +88,9 @@ pacttesting.AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Int
 // then
 // check that the interactions are called
 pacttesting.VerifyInteractions(s.t, "testservicea", "go-pact-testing")
+
+// pact servers are re-used, so it is best to remove the interactions before or after the each test
+pacttesting.ResetPacts()
 ```
 
 ### Integration Test
