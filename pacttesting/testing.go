@@ -309,6 +309,7 @@ func EnsurePactRunning(provider, consumer string) string {
 
 		assignPorts(provider, consumer)
 		port := serverPortMap[key]
+		buildPactClientOnce()
 		server := pactClient.StartServer(args, port)
 		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
 		mockServer := &MockServer{
