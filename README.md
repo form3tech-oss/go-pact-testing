@@ -55,8 +55,47 @@ Consumer testing uses pact files to define mocks for any dependent services whic
 can be used to provide expected responses to tests and also verify that interactions were indeed made. Once testing is 
 complete, consumer pacts are uploaded to the pact broker via the `pact-publish` task, for verification by provider tests. 
 
-Consumer tests can be written using the `IntegrationTest` function. Pacts should be stored in a directory called 'pacts': 
+There are two ways to define consumer tests - the original integration test or the newer DSL test. 
+
+### DSL
+
+DSL tests define interactions and verify responses as part of the test. This may result in more expressive tests when using BDD style tests
+
+```go
+// pact servers can be optionally started during test setup. A free port is chosen automatically. This may be useful if the url needs to be injected into the service under test.
+url := pacttesting.EnsurePactRunning("testservicea", "go-pact-testing")
+
+// given
+// test service returns 200 for a get request
+// .. either from json
+pacttesting.AddPact(s.t,"testservicea.get.test")
+// .. or via code
+pacttesting.AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Interaction{}).
+		UponReceiving("Request for a test endpoint A").
+		WithRequest(dsl.Request{
+			Method: "GET",
+			Path:   dsl.String("/v1/test"),
+		}).
+		WillRespondWith(dsl.Response{
+			Status:  200,
+			Headers: dsl.MapMatcher{"Content-Type": dsl.String("application/json; charset=utf-8")},
+			Body:    map[string]string{"foo": "bar"},
+		}))
+
+// when 
+// ... functionality that invokes the service
+
+// then
+// check that the interactions are called
+pacttesting.VerifyInteractions(s.t, "testservicea", "go-pact-testing")
+
+// pact servers are re-used, so it is best to remove the interactions before or after the each test
+pacttesting.ResetPacts()
 ```
+
+### Integration Test
+Consumer tests can be written using the `IntegrationTest` function. Pacts should be stored in a directory called 'pacts': 
+```go
 IntegrationTest([]Pact{"testservicea.get.test", "testserviceb.get.test"}, func() {
     // test-code-here. 
 })
