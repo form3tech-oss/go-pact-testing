@@ -55,6 +55,12 @@ Consumer testing uses pact files to define mocks for any dependent services whic
 can be used to provide expected responses to tests and also verify that interactions were indeed made. Once testing is 
 complete, consumer pacts are uploaded to the pact broker via the `pact-publish` task, for verification by provider tests. 
 
+Consumer testing uses the pact standalone ruby executable. As default, this will be left running after the test completes
+so that future iterations of the test run faster. Note that some testing systems may automatically clear up subprocesses
+started by the tests. Notably, binaries produced by `go test -c` (as used by goland) will stop any subprocesses it started.
+To benefit from re-use of the mock servers, run a test manually from the command line with `go test -run Test_MyTestUsingPact`
+before running additional tests via the IDE.
+
 There are two ways to define consumer tests - the original integration test or the newer DSL test. 
 
 ### DSL
@@ -64,6 +70,9 @@ DSL tests define interactions and verify responses as part of the test. This may
 ```go
 // pact servers can be optionally started during test setup. A free port is chosen automatically. This may be useful if the url needs to be injected into the service under test.
 url := pacttesting.EnsurePactRunning("testservicea", "go-pact-testing")
+
+// pact servers are re-used, so it is best to remove the interactions before or after the each test. This can be configured in the test stage creation.
+t.Cleanup(pacttesting.ResetPacts)
 
 // given
 // test service returns 200 for a get request
@@ -89,8 +98,8 @@ pacttesting.AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Int
 // check that the interactions are called
 pacttesting.VerifyInteractions(s.t, "testservicea", "go-pact-testing")
 
-// pact servers are re-used, so it is best to remove the interactions before or after the each test
-pacttesting.ResetPacts()
+// Optional: stop mock servers. If this is omitted then pact servers will be left running and re-used
+pacttesting.StopMockServers()
 ```
 
 ### Integration Test

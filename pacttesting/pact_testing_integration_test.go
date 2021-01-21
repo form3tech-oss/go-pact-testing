@@ -27,11 +27,11 @@ func TestAcc_verify_pact_with_single_pact_dsl(t *testing.T) {
 	given.
 		test_service_a_returns_200_for_get()
 
-	when. // mock servers started before here
+	when.
 		test_service_a_is_called()
 
 	then.
-		test_service_a_was_invoked() // verify pacts are called
+		test_service_a_was_invoked()
 }
 
 func TestAcc_verify_pact_with_single_pact_file(t *testing.T) {
@@ -40,11 +40,11 @@ func TestAcc_verify_pact_with_single_pact_file(t *testing.T) {
 	given.
 		test_service_a_returns_200_for_get_from_file()
 
-	when. // mock servers started before here
+	when.
 		test_service_a_is_called()
 
 	then.
-		test_service_a_was_invoked() // verify pacts are called
+		test_service_a_was_invoked()
 }
 
 func TestAcc_verify_two_pacts_from_two_providers(t *testing.T) {
@@ -193,6 +193,37 @@ func TestAcc_verify_pact_with_single_pact_interactions_are_deleted(t *testing.T)
 		when.
 			the_test_panics()
 	})
+}
+
+func TestAcc_pact_server_reused(t *testing.T) {
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		test_service_a_returns_200_for_get_from_file().and().
+		test_service_a_is_called().and().
+		the_test_completes_and_a_new_test_process_starts()
+
+	when.
+		a_mock_interaction_is_added()
+
+	then.
+		no_new_server_is_started()
+}
+
+func TestAcc_pact_server_started(t *testing.T) {
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		test_service_a_returns_200_for_get_from_file().and().
+		test_service_a_is_called().and().
+		the_pact_server_is_manually_stopped().and().
+		the_test_completes_and_a_new_test_process_starts()
+
+	when.
+		a_mock_interaction_is_added()
+
+	then.
+		a_new_mock_server_is_started()
 }
 
 func TestMain(m *testing.M) {
