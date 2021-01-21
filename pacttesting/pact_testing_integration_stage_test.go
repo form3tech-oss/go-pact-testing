@@ -31,6 +31,7 @@ type pactTestingStage struct {
 	pactFile            *PactFile
 	splitPactFiles      []*PactFile
 	interactionDuration time.Duration
+	testServiceApid     int
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
@@ -222,6 +223,7 @@ func (s *pactTestingStage) test_service_a_returns_200_for_get_from_file() *pactT
 }
 
 func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
+	s.testServiceApid = pactServers["testserviceago-pact-testing"].Pid
 	return s.the_pact_for_service_a_is_called()
 }
 
@@ -245,7 +247,7 @@ func (s *pactTestingStage) a_mock_interaction_is_added() *pactTestingStage {
 }
 
 func (s *pactTestingStage) no_new_server_is_started() *pactTestingStage {
-	assert.Less(s.t, s.interactionDuration.Milliseconds(), 50*time.Millisecond.Milliseconds(), fmt.Sprintf("function took %s", s.interactionDuration))
+	assert.Equal(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
 
@@ -263,6 +265,6 @@ func (s *pactTestingStage) the_pact_server_is_manually_stopped() *pactTestingSta
 }
 
 func (s *pactTestingStage) a_new_mock_server_is_started() *pactTestingStage {
-	assert.Greater(s.t, s.interactionDuration.Milliseconds(), 1000*time.Millisecond.Milliseconds(), fmt.Sprintf("function took %s", s.interactionDuration))
+	assert.NotEqual(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
