@@ -77,9 +77,9 @@ t.Cleanup(pacttesting.ResetPacts)
 // given
 // test service returns 200 for a get request
 // .. either from json
-pacttesting.AddPact(s.t,"testservicea.get.test")
+assert.NoError(t, pacttesting.AddPact("testservicea.get.test"))
 // .. or via code
-pacttesting.AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Interaction{}).
+assert.NoError(t, pacttesting.AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
 		UponReceiving("Request for a test endpoint A").
 		WithRequest(dsl.Request{
 			Method: "GET",
@@ -89,14 +89,14 @@ pacttesting.AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Int
 			Status:  200,
 			Headers: dsl.MapMatcher{"Content-Type": dsl.String("application/json; charset=utf-8")},
 			Body:    map[string]string{"foo": "bar"},
-		}))
+		})))
 
 // when 
 // ... functionality that invokes the service
 
 // then
 // check that the interactions are called
-pacttesting.VerifyInteractions(s.t, "testservicea", "go-pact-testing")
+assert.NoError(pacttesting.VerifyInteractions("testservicea", "go-pact-testing"))
 
 // Optional: stop mock servers. If this is omitted then pact servers will be left running and re-used
 pacttesting.StopMockServers()

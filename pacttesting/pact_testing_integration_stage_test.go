@@ -203,7 +203,7 @@ func (s *pactTestingStage) the_test_panics() {
 	panic("Test Panic")
 }
 func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStage {
-	AddPactInteraction(s.t, "testservicea", "go-pact-testing", (&dsl.Interaction{}).
+	assert.NoError(s.t, AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
 		UponReceiving("Request for a test endpoint A").
 		WithRequest(dsl.Request{
 			Method: "GET",
@@ -213,12 +213,12 @@ func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStag
 			Status:  200,
 			Headers: dsl.MapMatcher{"Content-Type": dsl.String("application/json; charset=utf-8")},
 			Body:    map[string]string{"foo": "bar"},
-		}))
+		})))
 	return s
 }
 
 func (s *pactTestingStage) test_service_a_returns_200_for_get_from_file() *pactTestingStage {
-	AddPact(s.t, "testservicea.get.test")
+	assert.NoError(s.t, AddPact("testservicea.get.test"))
 	return s
 }
 
@@ -228,7 +228,7 @@ func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
 }
 
 func (s *pactTestingStage) test_service_a_was_invoked() *pactTestingStage {
-	VerifyInteractions(s.t, "testservicea", "go-pact-testing", retry.MaxTries(3))
+	assert.NoError(s.t, VerifyInteractions("testservicea", "go-pact-testing", retry.MaxTries(3)))
 	return s
 }
 
