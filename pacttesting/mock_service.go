@@ -7,12 +7,20 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
 type MockServer struct {
+	Port     int
 	BaseURL  string
 	Consumer string
 	Provider string
+	Pid      int
+	Running  bool `json:"-"`
 }
 
 // call sends a message to the Pact service
@@ -64,4 +72,52 @@ func (m *MockServer) AddInteraction(interaction interface{}) error {
 func (m *MockServer) Verify() error {
 	url := fmt.Sprintf("%s/interactions/verification", m.BaseURL)
 	return m.call("GET", url, nil)
+}
+
+func (m *MockServer) writePidFile() {
+	bytes, err := json.Marshal(m)
+	if err != nil {
+		log.WithError(err).Errorf("unable to convert mock server to json")
+		return
+	}
+	dir, _ := os.Getwd()
+	_ = os.MkdirAll(filepath.FromSlash(filepath.Join(dir, "pact", "pids")), os.ModePerm)
+	file := filepath.FromSlash(fmt.Sprintf("%s/pact-%s-%s.json", filepath.Join(dir, "pact", "pids"), m.Provider, m.Consumer))
+	err = ioutil.WriteFile(file, bytes, os.ModePerm)
+	if err != nil {
+		log.WithError(err).Errorf("unable to store mock server details")
+		return
+	}
+}
+
+func loadRunningServer(provider, consumer string) *MockServer {
+	dir, _ := os.Getwd()
+	file := filepath.FromSlash(fmt.Sprintf("%s/pact-%s-%s.json", filepath.Join(dir, "pact", "pids"), provider, consumer))
+
+	bytes, err := ioutil.ReadFile(file)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	var server MockServer
+	err = json.Unmarshal(bytes, &server)
+	if err != nil {
+		log.WithError(err).Errorf("unable to read pid file %s", file)
+		return nil
+	}
+
+	err = server.call("GET", server.BaseURL, nil)
+	if err != nil {
+		log.WithError(err).Errorf("%s pact server defined in %s with pid %d no longer responding. Will start a new one.", server.Provider, file, server.Pid)
+		err = os.Remove(file)
+		if err != nil {
+			log.WithError(err).Warnf("unable to remove %s", file)
+		}
+		return nil
+	}
+
+	server.Running = true
+	pactServers[provider+consumer] = &server
+	viper.Set(provider, server.BaseURL)
+	log.Infof("Reusing existing mock service for %s at %s, pid %d", server.Provider, server.BaseURL, server.Pid)
+	return &server
 }

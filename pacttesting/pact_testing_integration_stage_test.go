@@ -3,14 +3,17 @@ package pacttesting
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/giantswarm/retry-go"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pact-foundation/pact-go/dsl"
 	"github.com/spf13/viper"
@@ -24,9 +27,11 @@ type pactTestingStage struct {
 	responseA *http.Response
 	responseB *http.Response
 
-	pactFilePath   string
-	pactFile       *PactFile
-	splitPactFiles []*PactFile
+	pactFilePath        string
+	pactFile            *PactFile
+	splitPactFiles      []*PactFile
+	interactionDuration time.Duration
+	testServiceApid     int
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
@@ -38,7 +43,7 @@ func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactT
 }
 
 func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
-	ResetPacts()
+	t.Cleanup(ResetPacts)
 	s := &pactTestingStage{
 		t: t,
 	}
@@ -177,7 +182,7 @@ func (s *pactTestingStage) provider_pact_verification_is_successful() *pactTesti
 }
 
 func (s *pactTestingStage) the_service_does_not_have_preassigned_port() *pactTestingStage {
-	assert.NotContains(s.t, serverPortMap, "testservice-prego-pact-testing")
+	assert.Nil(s.t, pactServers["testservice-prego-pact-testing"])
 	assert.Equal(s.t, "", viper.GetString("testservice-pre"))
 	return s
 }
@@ -189,7 +194,8 @@ func (s *pactTestingStage) the_service_gets_preassigned() *pactTestingStage {
 
 func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStage {
 	assert.NotEqual(s.t, "", viper.GetString("testservice-pre"))
-	assert.Contains(s.t, serverPortMap, "testservice-prego-pact-testing")
+	assert.NotNil(s.t, pactServers["testservice-prego-pact-testing"])
+	assert.Greater(s.t, pactServers["testservice-prego-pact-testing"].Port, 0)
 	return s
 }
 
@@ -217,10 +223,48 @@ func (s *pactTestingStage) test_service_a_returns_200_for_get_from_file() *pactT
 }
 
 func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
+	s.testServiceApid = pactServers["testserviceago-pact-testing"].Pid
 	return s.the_pact_for_service_a_is_called()
 }
 
 func (s *pactTestingStage) test_service_a_was_invoked() *pactTestingStage {
-	VerifyInteractions(s.t, "testservicea", "go-pact-testing")
+	VerifyInteractions(s.t, "testservicea", "go-pact-testing", retry.MaxTries(3))
+	return s
+}
+
+func (s *pactTestingStage) the_test_completes_and_a_new_test_process_starts() *pactTestingStage {
+	// simulate the test ending and a new test starting by clearing the internal state.
+	clearInternalState()
+	return s
+}
+
+func (s *pactTestingStage) a_mock_interaction_is_added() *pactTestingStage {
+	log.Println("adding a mock interaction")
+	start := time.Now()
+	s.test_service_a_returns_200_for_get_from_file()
+	s.interactionDuration = time.Now().Sub(start)
+	return s
+}
+
+func (s *pactTestingStage) no_new_server_is_started() *pactTestingStage {
+	assert.Equal(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
+	return s
+}
+
+func (s *pactTestingStage) the_pact_server_is_manually_stopped() *pactTestingStage {
+	pid := pactServers["testserviceago-pact-testing"].Pid
+	log.Infof("Stopping server, pid %d", pid)
+	process, err := os.FindProcess(pid)
+	assert.NoError(s.t, err)
+	err = process.Signal(syscall.SIGKILL)
+	assert.NoError(s.t, err)
+	err = process.Kill()
+	assert.NoError(s.t, err)
+	log.Println("server has been manually stopped")
+	return s
+}
+
+func (s *pactTestingStage) a_new_mock_server_is_started() *pactTestingStage {
+	assert.NotEqual(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
