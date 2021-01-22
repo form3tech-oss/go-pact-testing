@@ -19,7 +19,6 @@ import (
 	"github.com/phayes/freeport"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 )
 
 type Pact = string
@@ -231,7 +230,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 }
 
 // AddPact loads a pact definition from a file and ensures that stub servers are running.
-func AddPact(t *testing.T, filename string) {
+func AddPact(filename string) error {
 	pactFilePaths := []string{filename}
 	buildPactClientOnce()
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
@@ -241,22 +240,24 @@ func AddPact(t *testing.T, filename string) {
 
 		for _, i := range p.Interactions {
 			err := pactServers[key].AddInteraction(i)
-			assert.NoError(t, err, "Error adding pact from %s: %v", filename, err)
+			if err != nil {
+				return fmt.Errorf("error adding pact from %s: %v", filename, err)
+			}
 		}
 	}
+	return nil
 }
 
 // AddPactInteraction ensures that a stub server is running for the provided provider/consumer and returns an
 // interaction to be configured
-func AddPactInteraction(t *testing.T, provider, consumer string, interaction *dsl.Interaction) {
+func AddPactInteraction(provider, consumer string, interaction *dsl.Interaction) error {
 	buildPactClientOnce()
 	key := provider + consumer
 	EnsurePactRunning(provider, consumer)
-	err := pactServers[key].AddInteraction(interaction)
-	assert.NoError(t, err, "Error adding pact: %v", err)
+	return pactServers[key].AddInteraction(interaction)
 }
 
-func VerifyInteractions(t *testing.T, provider, consumer string, retryOptions ...retry.RetryOption) {
+func VerifyInteractions(provider, consumer string, retryOptions ...retry.RetryOption) error {
 	verify := func() error {
 		key := provider + consumer
 		err := pactServers[key].Verify()
@@ -275,8 +276,9 @@ func VerifyInteractions(t *testing.T, provider, consumer string, retryOptions ..
 		retryOptions = defaultRetryOptions
 	}
 	if err := retry.Do(verify, retryOptions...); err != nil {
-		assert.NoError(t, err, "Pact verification failed!! For more info on the error check the logs/pact.log file it is quite detailed")
+		return fmt.Errorf("pact verification for %s failed!! For more info on the error check the logs/pact.log file it is quite detailed", provider)
 	}
+	return nil
 }
 
 func EnsurePactRunning(provider, consumer string) string {
