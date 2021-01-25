@@ -318,7 +318,6 @@ func EnsurePactRunning(provider, consumer string) string {
 			"--port",
 			strconv.Itoa(port)}
 		cmd := exec.Command("pact-mock-service", args...)
-		setPathOnce()
 		cmd.Env = os.Environ()
 
 		log.Debugf("%s %s", "pact-mock-service", strings.Join(args, " "))
