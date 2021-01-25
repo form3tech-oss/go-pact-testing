@@ -192,6 +192,9 @@ func assignPort(provider, consumer string) int {
 
 func ResetPacts() {
 	for key, pactServer := range pactServers {
+		if !pactServer.Running {
+			continue
+		}
 		err := pactServer.DeleteInteractions()
 		if err != nil {
 			log.WithError(err).Errorf("unable to delete configured interactions for %s", key)
