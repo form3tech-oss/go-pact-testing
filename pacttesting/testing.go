@@ -35,6 +35,7 @@ type pactName struct {
 }
 
 var (
+	pathOnce    sync.Once
 	once        sync.Once
 	pactClient  *dsl.PactClient
 	pactServers = make(map[string]*MockServer)
@@ -137,24 +138,22 @@ func getVersion() (string, error) {
 	return version, nil
 }
 
-func newPactClient() (*dsl.PactClient, error) {
-	topLevelDir, err := getTopLevelDir()
-	if err != nil {
-		return nil, err
-	}
-	pactPath := filepath.Join(topLevelDir, "pact/bin")
+func setPathOnce() {
+	pathOnce.Do(func() {
+		topLevelDir, err := getTopLevelDir()
+		if err != nil {
+			panic(err)
+		}
+		pactPath := filepath.Join(topLevelDir, "pact/bin")
 
-	os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
-	return dsl.NewClient(), nil
+		os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
+	})
 }
 
 func buildPactClientOnce() {
 	once.Do(func() {
-		client, err := newPactClient()
-		if err != nil {
-			panic(err)
-		}
-		pactClient = client
+		setPathOnce()
+		pactClient = dsl.NewClient()
 	})
 }
 
@@ -316,12 +315,13 @@ func EnsurePactRunning(provider, consumer string) string {
 			"--port",
 			strconv.Itoa(port)}
 		cmd := exec.Command("pact-mock-service", args...)
+		setPathOnce()
 		cmd.Env = os.Environ()
 
 		log.Debugf("%s %s", "pact-mock-service", strings.Join(args, " "))
 		err := cmd.Start()
 		if err != nil {
-			log.WithError(err).Fatalf("failed to stat mock server")
+			log.WithError(err).Fatalf("failed to start mock server")
 		}
 
 		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
@@ -378,8 +378,8 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 	})
 }
 
+// Deprecated: StopMockServers left here for backwards compatibility, does not stop anything.
 func StopMockServers() {
-	// left here for backward compatibility.
 }
 
 func VerifyAll() error {
