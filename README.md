@@ -55,11 +55,8 @@ Consumer testing uses pact files to define mocks for any dependent services whic
 can be used to provide expected responses to tests and also verify that interactions were indeed made. Once testing is 
 complete, consumer pacts are uploaded to the pact broker via the `pact-publish` task, for verification by provider tests. 
 
-Consumer testing uses the pact standalone ruby executable. As default, this will be left running after the test completes
-so that future iterations of the test run faster. Note that some testing systems may automatically clear up subprocesses
-started by the tests. Notably, binaries produced by `go test -c` (as used by goland) will stop any subprocesses it started.
-To benefit from re-use of the mock servers, run a test manually from the command line with `go test -run Test_MyTestUsingPact`
-before running additional tests via the IDE.
+Consumer testing uses the pact standalone ruby executable. This will be left running after the test completes
+so that future iterations of the test run faster.
 
 There are two ways to define consumer tests - the original integration test or the newer DSL test. 
 
@@ -97,9 +94,6 @@ assert.NoError(t, pacttesting.AddPactInteraction("testservicea", "go-pact-testin
 // then
 // check that the interactions are called
 assert.NoError(pacttesting.VerifyInteractions("testservicea", "go-pact-testing"))
-
-// Optional: stop mock servers. If this is omitted then pact servers will be left running and re-used
-pacttesting.StopMockServers()
 ```
 
 ### Integration Test

@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	c "os/exec"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -34,10 +35,10 @@ type pactName struct {
 }
 
 var (
-	once                sync.Once
-	pactClient          *dsl.PactClient
-	pactServerProcesses = make(map[string]*types.MockServer)
-	pactServers         = make(map[string]*MockServer)
+	pathOnce    sync.Once
+	once        sync.Once
+	pactClient  *dsl.PactClient
+	pactServers = make(map[string]*MockServer)
 )
 
 var defaultRetryOptions = []retry.RetryOption{
@@ -64,7 +65,7 @@ func readPactFile(pactFilePath string) *pact {
 	}
 
 	p := &pact{}
-	err = json.Unmarshal([]byte(pactString), p)
+	err = json.Unmarshal(pactString, p)
 
 	if err != nil {
 		panic(err)
@@ -110,7 +111,7 @@ func groupByProvider(pacts []*pact) []*pact {
 }
 
 func getTopLevelDir() (string, error) {
-	gitCommand := c.Command("git", "rev-parse", "--show-toplevel")
+	gitCommand := exec.Command("git", "rev-parse", "--show-toplevel")
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
@@ -124,7 +125,7 @@ func getTopLevelDir() (string, error) {
 }
 
 func getVersion() (string, error) {
-	gitCommand := c.Command("git", "describe")
+	gitCommand := exec.Command("git", "describe")
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
@@ -137,24 +138,22 @@ func getVersion() (string, error) {
 	return version, nil
 }
 
-func newPactClient() (*dsl.PactClient, error) {
-	topLevelDir, err := getTopLevelDir()
-	if err != nil {
-		return nil, err
-	}
-	pactPath := filepath.Join(topLevelDir, "pact/bin")
+func setPathOnce() {
+	pathOnce.Do(func() {
+		topLevelDir, err := getTopLevelDir()
+		if err != nil {
+			panic(err)
+		}
+		pactPath := filepath.Join(topLevelDir, "pact/bin")
 
-	os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
-	return dsl.NewClient(), nil
+		os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
+	})
 }
 
 func buildPactClientOnce() {
 	once.Do(func() {
-		client, err := newPactClient()
-		if err != nil {
-			panic(err)
-		}
-		pactClient = client
+		setPathOnce()
+		pactClient = dsl.NewClient()
 	})
 }
 
@@ -205,7 +204,6 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 	defer ResetPacts()
 
 	PreassignPorts(pactFilePaths)
-	buildPactClientOnce()
 
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 
@@ -232,7 +230,6 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 // AddPact loads a pact definition from a file and ensures that stub servers are running.
 func AddPact(filename string) error {
 	pactFilePaths := []string{filename}
-	buildPactClientOnce()
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
@@ -251,7 +248,6 @@ func AddPact(filename string) error {
 // AddPactInteraction ensures that a stub server is running for the provided provider/consumer and returns an
 // interaction to be configured
 func AddPactInteraction(provider, consumer string, interaction *dsl.Interaction) error {
-	buildPactClientOnce()
 	key := provider + consumer
 	EnsurePactRunning(provider, consumer)
 	return pactServers[key].AddInteraction(interaction)
@@ -275,8 +271,9 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.RetryOp
 	if len(retryOptions) == 0 {
 		retryOptions = defaultRetryOptions
 	}
+	cwd, _ := os.Getwd()
 	if err := retry.Do(verify, retryOptions...); err != nil {
-		return fmt.Errorf("pact verification for %s failed!! For more info on the error check the logs/pact.log file it is quite detailed", provider)
+		return fmt.Errorf("pact interactions not matched - for details see %s/pact/logs/pact-%s.log", cwd, provider)
 	}
 	return nil
 }
@@ -295,7 +292,12 @@ func EnsurePactRunning(provider, consumer string) string {
 			return mockServer.BaseURL
 		}
 
-		args := []string{
+		log.Infof("starting new mock server for consumer: %s, provider: %s", consumer, provider)
+		// This is done manually rather than using pact-go's service manager code, since that pipes the output streams,
+		// so isn't suitable for long-running pact-servers if there is a problem that triggers stdout/stderr output.
+		// It also prevents the servers from remaining started when run from goland or compiled test binaries
+		port := assignPort(provider, consumer)
+		args := []string{"service",
 			"--pact-specification-version",
 			fmt.Sprintf("%d", 3),
 			"--pact-dir",
@@ -310,26 +312,37 @@ func EnsurePactRunning(provider, consumer string) string {
 			"merge",
 			"--host",
 			bind,
+			"--port",
+			strconv.Itoa(port)}
+		cmd := exec.Command("pact-mock-service", args...)
+		setPathOnce()
+		cmd.Env = os.Environ()
+
+		log.Debugf("%s %s", "pact-mock-service", strings.Join(args, " "))
+		err := cmd.Start()
+		if err != nil {
+			log.WithError(err).Fatalf("failed to start mock server")
 		}
 
-		log.Infof("starting new mock server for consumer: %s, provider: %s", consumer, provider)
-
-		port := assignPort(provider, consumer)
-		buildPactClientOnce()
-		server := pactClient.StartServer(args, port)
 		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
 		mockServer = &MockServer{
 			Port:     port,
 			BaseURL:  serverAddress,
 			Consumer: consumer,
 			Provider: provider,
-			Pid:      server.Pid,
+			Pid:      cmd.Process.Pid,
 			Running:  true,
 		}
+		err = retry.Do(func() error {
+			return mockServer.call("GET", serverAddress, nil)
+		}, retry.Timeout(5*time.Second), retry.Sleep(25*time.Millisecond), retry.MaxTries(1000))
+		if err != nil {
+			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid %d`, mockServer.Pid)
+		}
+
 		mockServer.writePidFile()
 		viper.Set(provider, mockServer.BaseURL)
 		pactServers[key] = mockServer
-		pactServerProcesses[key] = server
 	}
 	return mockServer.BaseURL
 }
@@ -365,17 +378,8 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 	})
 }
 
+// Deprecated: StopMockServers left here for backwards compatibility, does not stop anything.
 func StopMockServers() {
-	// keep servers alive by default
-	if os.Getenv("STOP_PACT_SERVERS") != "1" {
-		log.Infof("Leaving pact servers running for future test runs")
-		return
-	}
-	for _, pactServer := range pactServerProcesses {
-		if pactServer != nil {
-			pactClient.StopServer(pactServer)
-		}
-	}
 }
 
 func VerifyAll() error {
@@ -499,7 +503,6 @@ func getBindAddress() string {
 
 // clearInternalState is a hack for test purposes to simulate a test running in a different process
 func clearInternalState() {
-	pactServerProcesses = map[string]*types.MockServer{}
 	pactServers = map[string]*MockServer{}
 	once = sync.Once{}
 	pactClient = &dsl.PactClient{}
