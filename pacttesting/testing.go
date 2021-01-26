@@ -36,6 +36,7 @@ type pactName struct {
 
 var (
 	pathOnce    sync.Once
+	pactPath    string
 	once        sync.Once
 	pactClient  *dsl.PactClient
 	pactServers = make(map[string]*MockServer)
@@ -144,7 +145,7 @@ func setPathOnce() {
 		if err != nil {
 			panic(err)
 		}
-		pactPath := filepath.Join(topLevelDir, "pact/bin")
+		pactPath = filepath.Join(topLevelDir, "pact/bin")
 
 		os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
 	})
@@ -317,11 +318,12 @@ func EnsurePactRunning(provider, consumer string) string {
 			bind,
 			"--port",
 			strconv.Itoa(port)}
-		cmd := exec.Command("pact-mock-service", args...)
 		setPathOnce()
+		mockServicePath := pactPath + "/pact-mock-service"
+		cmd := exec.Command(mockServicePath, args...)
 		cmd.Env = os.Environ()
 
-		log.Debugf("%s %s", "pact-mock-service", strings.Join(args, " "))
+		log.Debugf("%s %s", mockServicePath, strings.Join(args, " "))
 		err := cmd.Start()
 		if err != nil {
 			log.WithError(err).Fatalf("failed to start mock server")
