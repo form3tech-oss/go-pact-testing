@@ -296,11 +296,8 @@ func (s *pactTestingStage) a_mock_server_stops() *pactTestingStage {
 }
 
 func (s *pactTestingStage) pact_verification_written_to_disk() *pactTestingStage {
-	err := retry.Do(func() error {
-		_, fileErr := os.Stat("target/go-pact-testing-testservicea.json")
-		return fileErr
-	}, retry.Sleep(200*time.Millisecond), retry.Timeout(1*time.Second))
 
+	_, err := os.Stat("target/go-pact-testing-testservicea.json")
 	assert.NoError(s.t, err)
 
 	return s

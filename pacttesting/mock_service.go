@@ -107,15 +107,19 @@ func (m *MockServer) Stop() error {
 		// then kill it
 		if err := retry.Do(func() error {
 			// check if the process is still alive
-			return p.Signal(syscall.Signal(0))
+			err := p.Signal(syscall.Signal(0))
+			if err == nil {
+				return errors.New("server process is still alive")
+			}
+			return nil
 		}, retry.Timeout(5*time.Second), retry.Sleep(200*time.Millisecond)); err != nil {
-			log.Printf("server failed to stop after interrupt, killing process...")
 			p.Kill()
+			return errors.New("failed to stop server, attempting kill")
 		} else {
 			log.Printf("stopped server")
 		}
 	} else {
-		log.WithError(err).Errorf("cannot find process with pid %d", m.Pid)
+		log.WithError(err).Warnf("cannot find process with pid %d", m.Pid)
 	}
 
 	dir, _ := os.Getwd()
