@@ -32,6 +32,7 @@ type pactTestingStage struct {
 	splitPactFiles      []*PactFile
 	interactionDuration time.Duration
 	testServiceApid     int
+	testCaseDir         string
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
@@ -76,6 +77,13 @@ func (s *pactTestingStage) parsePactFile(fileName string) *PactFile {
 func (s *pactTestingStage) a_bulk_pact_file() *pactTestingStage {
 	wd, _ := os.Getwd()
 	s.pactFilePath = filepath.Join(wd, "pacts/testservices.get.bulk.test.json")
+	s.pactFile = s.parsePactFile(s.pactFilePath)
+	return s
+}
+
+func (s *pactTestingStage) a_bulk_pact_file_with_invalid_descriptions() *pactTestingStage {
+	wd, _ := os.Getwd()
+	s.pactFilePath = filepath.Join(wd, "pacts/testservices.get.bulk.invaliddescription.test.json")
 	s.pactFile = s.parsePactFile(s.pactFilePath)
 	return s
 }
@@ -147,11 +155,11 @@ func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 }
 
 func (s *pactTestingStage) file_is_split() *pactTestingStage {
-	testCaseDir := filepath.Join(os.TempDir(), time.Now().String())
-	if err := SplitPactBulkFile(s.pactFilePath, testCaseDir); err != nil {
-		log.Fatal("Couldn't split bulk files: ", err)
+	s.testCaseDir = filepath.Join(os.TempDir(), time.Now().String())
+	if err := SplitPactBulkFile(s.pactFilePath, s.testCaseDir); err != nil {
+		s.t.Error("Couldn't split bulk files: ", err)
 	}
-	files, _ := filepath.Glob(filepath.Join(testCaseDir, "*.json"))
+	files, _ := filepath.Glob(filepath.Join(s.testCaseDir, "*.json"))
 	s.splitPactFiles = make([]*PactFile, 0)
 	for _, f := range files {
 		s.splitPactFiles = append(s.splitPactFiles, s.parsePactFile(f))
@@ -166,6 +174,17 @@ func (s *pactTestingStage) many_small_pact_files_are_created() *pactTestingStage
 	}
 	assert.Equal(s.t, "Request for a test endpoint A", s.splitPactFiles[0].Interactions[0].Description)
 	assert.Equal(s.t, "Request for a test endpoint B", s.splitPactFiles[1].Interactions[0].Description)
+	return s
+}
+
+func (s *pactTestingStage) pact_file_names_exclude_path_separator() *pactTestingStage {
+
+	_, err := os.Stat(filepath.Join(s.testCaseDir, "Request for a test endpoint ACOR.json"))
+	assert.NoError(s.t, err)
+
+	_, err = os.Stat(filepath.Join(s.testCaseDir, "Request for a test endpoint BB2B.json"))
+	assert.NoError(s.t, err)
+
 	return s
 }
 
