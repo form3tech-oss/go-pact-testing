@@ -226,6 +226,21 @@ func TestAcc_pact_server_started(t *testing.T) {
 		a_new_mock_server_is_started()
 }
 
+func TestAcc_pact_file_written_to_disk(t *testing.T) {
+
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		clean_slate().and().
+		pact_verification_completed()
+
+	when.
+		a_mock_server_stops()
+
+	then.
+		pact_verification_written_to_disk()
+}
+
 func TestMain(m *testing.M) {
 
 	result := m.Run()
