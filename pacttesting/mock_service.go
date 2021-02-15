@@ -98,7 +98,7 @@ func (m *MockServer) writePidFile() {
 func (m *MockServer) Stop() error {
 	p, err := os.FindProcess(m.Pid)
 	if err == nil {
-		err = p.Signal(os.Interrupt)
+		err = p.Signal(syscall.SIGTERM)
 		if err != nil {
 			return errors.WithMessage(err, fmt.Sprintf("failed to send interrupt to pid %d", m.Pid))
 		}
@@ -113,7 +113,10 @@ func (m *MockServer) Stop() error {
 			}
 			return nil
 		}, retry.Timeout(5*time.Second), retry.Sleep(200*time.Millisecond)); err != nil {
-			p.Kill()
+			err = p.Kill()
+			if err != nil {
+				return errors.WithMessage(err, "failed to kill process")
+			}
 			return errors.New("failed to stop server, attempting kill")
 		} else {
 			log.Printf("stopped server")
