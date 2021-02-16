@@ -1,0 +1,38 @@
+{
+  "provider" : { "name" : "testservicea"  },
+  "consumer" : { "name" : "go-pact-testing"  },
+  "interactions" : [
+    {
+      "description" : "Request for a test endpoint A/COR",
+      "request" : {
+        "method" : "GET",
+        "path" : "/v1/test"
+      },
+      "response" : {
+        "status" : 200,
+        "headers" : {
+          "Content-Type" : "application/json; charset=utf-8"
+        },
+        "body" : {
+          "foo": "bar"
+        }
+      }
+    },
+    {
+      "description" : "Request for a test endpoint B/B2B",
+      "request" : {
+        "method" : "GET",
+        "path" : "/v1/test"
+      },
+      "response" : {
+        "status" : 200,
+        "headers" : {
+          "Content-Type" : "application/json; charset=utf-8"
+        },
+        "body" : {
+          "foo": "bar"
+        }
+      }
+    }
+  ]
+}
