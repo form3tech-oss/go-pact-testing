@@ -287,3 +287,37 @@ func (s *pactTestingStage) a_new_mock_server_is_started() *pactTestingStage {
 	assert.NotEqual(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
+
+func (s *pactTestingStage) clean_slate() *pactTestingStage {
+	os.RemoveAll("target")
+
+	return s
+}
+
+func (s *pactTestingStage) pact_verification_completed() *pactTestingStage {
+	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
+		given, _, _ := PactTestingTest(s.t)
+
+		given.
+			the_test_is_using_a_single_pact().
+			the_pact_for_service_a_is_called().
+			the_response_for_service_a_should_be_200_ok().and().
+			no_error_should_be_returned_from_service_a()
+	})
+
+	return s
+}
+
+func (s *pactTestingStage) a_mock_server_stops() *pactTestingStage {
+	StopMockServers()
+
+	return s
+}
+
+func (s *pactTestingStage) pact_verification_written_to_disk() *pactTestingStage {
+
+	_, err := os.Stat("target/go-pact-testing-testservicea.json")
+	assert.NoError(s.t, err)
+
+	return s
+}

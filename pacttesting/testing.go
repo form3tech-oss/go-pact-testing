@@ -383,8 +383,15 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 	})
 }
 
-// Deprecated: StopMockServers left here for backwards compatibility, does not stop anything.
 func StopMockServers() {
+	for key, s := range pactServers {
+		err := s.Stop()
+		if err != nil {
+			log.WithError(err).Errorf("failed to stop server for consumer(%s), provider(%s)", s.Consumer, s.Provider)
+		} else {
+			delete(pactServers, key)
+		}
+	}
 }
 
 func VerifyAll() error {

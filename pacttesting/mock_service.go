@@ -3,13 +3,16 @@ package pacttesting
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
+	"time"
 
+	"github.com/giantswarm/retry-go"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -88,6 +91,47 @@ func (m *MockServer) writePidFile() {
 		log.WithError(err).Errorf("unable to store mock server details")
 		return
 	}
+}
+
+// Stop gracefully shuts does the underlying pact-mock-service process
+// and removes the server metadata (pid) file.
+func (m *MockServer) Stop() error {
+	p, err := os.FindProcess(m.Pid)
+	if err == nil {
+		err = p.Signal(syscall.SIGTERM)
+		if err != nil {
+			return errors.WithMessage(err, fmt.Sprintf("failed to send interrupt to pid %d", m.Pid))
+		}
+
+		// wait for process to exit after interrupt, if it fails to stop
+		// then kill it
+		if err := retry.Do(func() error {
+			// check if the process is still alive
+			err := p.Signal(syscall.Signal(0))
+			if err == nil {
+				return errors.New("server process is still alive")
+			}
+			return nil
+		}, retry.Timeout(5*time.Second), retry.Sleep(200*time.Millisecond)); err != nil {
+			err = p.Kill()
+			if err != nil {
+				return errors.WithMessage(err, "failed to kill process")
+			}
+			return errors.New("failed to stop server, attempting kill")
+		} else {
+			log.Printf("stopped server")
+		}
+	} else {
+		log.WithError(err).Warnf("cannot find process with pid %d", m.Pid)
+	}
+
+	dir, _ := os.Getwd()
+	file := filepath.FromSlash(fmt.Sprintf("%s/pact-%s-%s.json", filepath.Join(dir, "pact", "pids"), m.Provider, m.Consumer))
+	err = os.Remove(file)
+	if err != nil {
+		log.WithError(err).Warnf("unable to remove pid file%s", file)
+	}
+	return nil
 }
 
 func loadRunningServer(provider, consumer string) *MockServer {
