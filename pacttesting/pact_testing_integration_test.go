@@ -137,6 +137,20 @@ func TestProvider_Should_Split_Bulk_File(t *testing.T) {
 
 }
 
+func TestProvider_GeneratesPactFiles_WithValidNames(t *testing.T) {
+
+	given, when, then := PactTestingTest(t)
+
+	given.
+		a_bulk_pact_file_with_invalid_descriptions()
+
+	when.
+		file_is_split()
+
+	then.
+		pact_file_names_exclude_path_separator()
+}
+
 func TestAcc_verify_all(t *testing.T) {
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
 
@@ -152,7 +166,6 @@ func TestAcc_verify_all(t *testing.T) {
 		then.
 			the_response_for_service_a_should_be_200_ok().and().
 			no_error_should_be_returned_from_the_verify()
-
 	})
 
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -49,10 +50,18 @@ func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters
 		if jsonErr != nil {
 			return errors.Wrap(jsonErr, "Couldn't change interaction to test case - interaction idx: "+strconv.Itoa(idx))
 		}
-		tcFilePath := filepath.Join(outputDirPath, tc.Interactions[0].Description+".json")
+
+		description := sanitize(tc.Interactions[0].Description)
+		tcFilePath := filepath.Join(outputDirPath, description+".json")
 		if writeErr := ioutil.WriteFile(tcFilePath, json, os.ModePerm); writeErr != nil {
 			return errors.Wrap(writeErr, "Couldn't write test case to file - interaction idx: "+strconv.Itoa(idx)+", output file path: "+tcFilePath)
 		}
 	}
 	return nil
+}
+
+func sanitize(value string) string {
+	value = strings.ReplaceAll(value, string(os.PathSeparator), "")
+
+	return value
 }
