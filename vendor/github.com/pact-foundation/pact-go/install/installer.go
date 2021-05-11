@@ -18,7 +18,7 @@ type Installer struct {
 
 const (
 	mockServiceRange = ">= 3.5.0, < 4.0.0"
-	verifierRange    = ">= 1.30.0, < 2.0.0"
+	verifierRange    = ">= 1.31.0, < 2.0.0"
 	brokerRange      = ">= 1.22.3"
 )
 
@@ -53,7 +53,7 @@ func (i *Installer) CheckInstallation() error {
 }
 
 // CheckVersion checks installation of a given binary using semver-compatible
-// comparisions
+// comparisons
 func (i *Installer) CheckVersion(binary, version string) error {
 	log.Println("[DEBUG] checking version for binary", binary, "version", version)
 	v, err := goversion.NewVersion(version)
