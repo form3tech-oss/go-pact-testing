@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := default
 
 platform := $(shell uname)
-pact_version := "1.61.0"
+pact_version := "1.88.51"
 
 GOFMT_FILES?=$$(find ./ -name '*.go' | grep -v vendor)
 

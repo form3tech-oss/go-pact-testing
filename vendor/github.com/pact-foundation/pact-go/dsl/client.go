@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pact-foundation/pact-go/client"
@@ -157,8 +158,12 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 	address := getAddress(request.ProviderBaseURL)
 	port := getPort(request.ProviderBaseURL)
 
-	waitForPort(port, p.getNetworkInterface(), address, p.TimeoutDuration,
+	err = waitForPort(port, p.getNetworkInterface(), address, p.TimeoutDuration,
 		fmt.Sprintf(`Timed out waiting for Provider API to start on port %d - are you sure it's running?`, port))
+
+	if err != nil {
+		return response, err
+	}
 
 	// Run command, splitting out stderr and stdout. The command can fail for
 	// several reasons:
@@ -182,7 +187,7 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 	}
 
 	// Buffered channel: wait for all reading to complete
-	done := make(chan struct{}, 2)
+	var wg sync.WaitGroup
 	verifications := []string{}
 	var stdErr strings.Builder
 
@@ -191,21 +196,25 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 	// See https://github.com/pact-foundation/pact-go/issues/88#issuecomment-404686337
 	stdOutScanner := bufio.NewScanner(stdOutPipe)
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
+		stdOutBuf := make([]byte, bufio.MaxScanTokenSize)
+		stdOutScanner.Buffer(stdOutBuf, 64*1024*1024)
+
 		for stdOutScanner.Scan() {
 			verifications = append(verifications, stdOutScanner.Text())
 		}
-
-		done <- struct{}{}
 	}()
 
 	// Scrape errors
 	stdErrScanner := bufio.NewScanner(stdErrPipe)
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
 		for stdErrScanner.Scan() {
 			stdErr.WriteString(fmt.Sprintf("%s\n", stdErrScanner.Text()))
 		}
 
-		done <- struct{}{}
 	}()
 
 	err = cmd.Start()
@@ -214,9 +223,8 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 	}
 
 	// Wait for watch goroutine before Cmd.Wait(), race condition!
-	<-done
-
 	err = cmd.Wait()
+	wg.Wait()
 
 	var verification types.ProviderVerifierResponse
 	for _, v := range verifications {
@@ -399,7 +407,7 @@ func getAddress(rawURL string) string {
 // Use this to wait for a port to be running prior
 // to running tests.
 var waitForPort = func(port int, network string, address string, timeoutDuration time.Duration, message string) error {
-	log.Println("[DEBUG] waiting for port", port, "to become available")
+	log.Println("[DEBUG] waiting for port", port, "to become available on", address, "after", timeoutDuration)
 	timeout := time.After(timeoutDuration)
 
 	for {
