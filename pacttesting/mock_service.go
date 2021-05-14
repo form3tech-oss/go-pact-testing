@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/giantswarm/retry-go"
+	"github.com/avast/retry-go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -112,7 +112,7 @@ func (m *MockServer) Stop() error {
 				return errors.New("server process is still alive")
 			}
 			return nil
-		}, retry.Timeout(5*time.Second), retry.Sleep(200*time.Millisecond)); err != nil {
+		}, retry.Attempts(25), retry.Delay(200*time.Millisecond)); err != nil {
 			err = p.Kill()
 			if err != nil {
 				return errors.WithMessage(err, "failed to kill process")
