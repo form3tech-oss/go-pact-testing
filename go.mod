@@ -3,10 +3,9 @@ module github.com/form3tech-oss/go-pact-testing
 go 1.14
 
 require (
+	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/giantswarm/retry-go v0.0.0-20151203102909-d78cea247d5e
 	github.com/hashicorp/go-version v1.2.1 // indirect
-	github.com/juju/errgo v0.0.0-20140925100237-08cceb5d0b53 // indirect
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/pact-foundation/pact-go v1.4.3
 	github.com/pelletier/go-toml v1.8.0 // indirect
