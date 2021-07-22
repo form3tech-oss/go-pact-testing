@@ -28,7 +28,7 @@ install-goimports:
 
 test: goimportscheck
 	@echo "executing tests..."
-	@go test -v github.com/form3tech-oss/go-pact-testing/pacttesting
+	@go test -v github.com/form3tech-oss/go-pact-testing/v2/pacttesting
 
 vet:
 	@echo "go vet ."
