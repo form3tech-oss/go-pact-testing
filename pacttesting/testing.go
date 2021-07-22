@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	retry "github.com/giantswarm/retry-go"
+	"github.com/avast/retry-go/v3"
 	"github.com/pact-foundation/pact-go/dsl"
 	"github.com/pact-foundation/pact-go/types"
-	"github.com/phayes/freeport"
+	"github.com/pact-foundation/pact-go/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -42,10 +42,9 @@ var (
 	pactServers = make(map[string]*MockServer)
 )
 
-var defaultRetryOptions = []retry.RetryOption{
-	retry.MaxTries(150000),
-	retry.Sleep(200 * time.Millisecond),
-	retry.Timeout(3 * time.Minute),
+var defaultRetryOptions = []retry.Option{
+	retry.Attempts(150000),
+	retry.Delay(200 * time.Millisecond),
 }
 
 func readPactFile(pactFilePath string) *pact {
@@ -175,7 +174,7 @@ func assignPort(provider, consumer string) int {
 	key := provider + consumer
 	_, ok := pactServers[key]
 	if !ok {
-		port, err := freeport.GetFreePort()
+		port, err := utils.GetFreePort()
 
 		if err != nil {
 			panic(err)
@@ -257,7 +256,7 @@ func AddPactInteraction(provider, consumer string, interaction *dsl.Interaction)
 	return pactServers[key].AddInteraction(interaction)
 }
 
-func VerifyInteractions(provider, consumer string, retryOptions ...retry.RetryOption) error {
+func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option) error {
 	verify := func() error {
 		key := provider + consumer
 		err := pactServers[key].Verify()
@@ -340,7 +339,7 @@ func EnsurePactRunning(provider, consumer string) string {
 		}
 		err = retry.Do(func() error {
 			return mockServer.call("GET", serverAddress, nil)
-		}, retry.Timeout(5*time.Second), retry.Sleep(25*time.Millisecond), retry.MaxTries(1000))
+		}, retry.Delay(25*time.Millisecond), retry.Attempts(200))
 		if err != nil {
 			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid %d`, mockServer.Pid)
 		}
@@ -353,7 +352,7 @@ func EnsurePactRunning(provider, consumer string) string {
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
-func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.RetryOption) {
+func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
 	TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
