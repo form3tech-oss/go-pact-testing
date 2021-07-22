@@ -112,7 +112,7 @@ func (m *MockServer) Stop() error {
 				return errors.New("server process is still alive")
 			}
 			return nil
-		}, retry.Attempts(25), retry.Delay(200*time.Millisecond)); err != nil {
+		}, retry.Attempts(25), retry.Delay(200*time.Millisecond), retry.DelayType(retry.FixedDelay)); err != nil {
 			err = p.Kill()
 			if err != nil {
 				return errors.WithMessage(err, "failed to kill process")

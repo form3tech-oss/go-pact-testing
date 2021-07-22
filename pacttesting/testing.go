@@ -45,6 +45,7 @@ var (
 var defaultRetryOptions = []retry.Option{
 	retry.Attempts(150000),
 	retry.Delay(200 * time.Millisecond),
+	retry.DelayType(retry.FixedDelay),
 }
 
 func readPactFile(pactFilePath string) *pact {
@@ -222,7 +223,6 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 			err := pactServers[key].AddInteraction(i)
 			if err != nil {
 				log.Fatalf("Error adding pact: %v", err)
-				panic(err)
 			}
 		}
 	}
