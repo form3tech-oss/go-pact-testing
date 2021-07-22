@@ -1,4 +1,4 @@
-module github.com/form3tech-oss/go-pact-testing
+module github.com/form3tech-oss/go-pact-testing/v2
 
 go 1.16
 
