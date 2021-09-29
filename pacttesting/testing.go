@@ -320,6 +320,10 @@ func EnsurePactRunning(provider, consumer string) string {
 		setPathOnce()
 		mockServicePath := pactPath + "/pact-mock-service"
 		cmd := exec.Command(mockServicePath, args...)
+
+		var outBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+
 		cmd.Env = os.Environ()
 
 		log.Debugf("%s %s", mockServicePath, strings.Join(args, " "))
@@ -341,7 +345,7 @@ func EnsurePactRunning(provider, consumer string) string {
 			return mockServer.call("GET", serverAddress, nil)
 		}, retry.Delay(25*time.Millisecond), retry.Attempts(200))
 		if err != nil {
-			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid %d`, mockServer.Pid)
+			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid:%d stdout: %s`, mockServer.Pid, outBuf.String())
 		}
 
 		mockServer.writePidFile()
