@@ -126,7 +126,7 @@ func getTopLevelDir() (string, error) {
 }
 
 func getVersion() (string, error) {
-	gitCommand := exec.Command("git", "describe")
+	gitCommand := exec.Command("git", "describe", "--tags")
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
