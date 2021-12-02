@@ -164,7 +164,7 @@ func loadRunningServer(provider, consumer string) *MockServer {
 	pactServers[provider+consumer] = &server
 	viper.Set(provider, server.BaseURL)
 	//Also set the base url as an environment variable to remove dependency on viper
-	os.Setenv("PACTTESTING_" + strings.ToUpper(provider), server.BaseURL)
+	os.Setenv("PACTTESTING_" + strings.ToUpper(provider), strings.Replace(server.BaseURL, "-", "_", -1))
 	log.Infof("Reusing existing mock service for %s at %s, pid %d", server.Provider, server.BaseURL, server.Pid)
 	return &server
 }
