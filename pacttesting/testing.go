@@ -187,6 +187,12 @@ func assignPort(provider, consumer string) int {
 			Provider: provider,
 		}
 		viper.Set(provider, pactServers[key].BaseURL)
+		//Also set the base url as an environment variable to remove dependency on viper
+		pactkey := "PACTTESTING_" + strings.ToUpper(strings.Replace(provider, "-", "_", -1))
+		err = os.Setenv(pactkey, pactServers[key].BaseURL)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to set environment variable %s", pactkey)
+		}
 	}
 	return pactServers[key].Port
 }
