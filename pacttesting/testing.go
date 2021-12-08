@@ -186,9 +186,19 @@ func assignPort(provider, consumer string) int {
 			Consumer: consumer,
 			Provider: provider,
 		}
-		viper.Set(provider, pactServers[key].BaseURL)
+		exposeServerUrl(provider, pactServers[key].BaseURL)
 	}
 	return pactServers[key].Port
+}
+
+func exposeServerUrl(provider, serverUrl string) {
+	viper.Set(provider, serverUrl)
+	//Also set the base url as an environment variable to remove dependency on viper
+	key := "PACTTESTING_" + strings.ToUpper(strings.Replace(provider, "-", "_", -1))
+	err := os.Setenv(key, serverUrl)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to set environment variable %s", key)
+	}
 }
 
 func ResetPacts() {
@@ -349,7 +359,7 @@ func EnsurePactRunning(provider, consumer string) string {
 		}
 
 		mockServer.writePidFile()
-		viper.Set(provider, mockServer.BaseURL)
+		exposeServerUrl(provider, mockServer.BaseURL)
 		pactServers[key] = mockServer
 	}
 	return mockServer.BaseURL

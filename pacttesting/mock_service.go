@@ -8,14 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/avast/retry-go/v3"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 )
 
 type MockServer struct {
@@ -162,13 +160,7 @@ func loadRunningServer(provider, consumer string) *MockServer {
 
 	server.Running = true
 	pactServers[provider+consumer] = &server
-	viper.Set(provider, server.BaseURL)
-	//Also set the base url as an environment variable to remove dependency on viper
-	key := "PACTTESTING_" + strings.ToUpper(strings.Replace(provider, "-", "_", -1))
-	err = os.Setenv(key, server.BaseURL)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to set environment variable %s", key)
-	}
+	exposeServerUrl(provider, server.BaseURL)
 	log.Infof("Reusing existing mock service for %s at %s, pid %d", server.Provider, server.BaseURL, server.Pid)
 	return &server
 }
