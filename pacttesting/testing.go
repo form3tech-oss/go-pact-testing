@@ -48,10 +48,6 @@ var defaultRetryOptions = []retry.Option{
 	retry.DelayType(retry.FixedDelay),
 }
 
-func helper() {
-
-}
-
 func readPactFile(pactFilePath string) *pact {
 	dir, _ := os.Getwd()
 
