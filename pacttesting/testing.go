@@ -300,7 +300,7 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 	return nil
 }
 
-func EnsurePactRunning(provider, consumer string, pactPathOverride ...string) string {
+func EnsurePactRunning(provider, consumer string) string {
 	dir, _ := os.Getwd()
 
 	// Allow binding to 0.0.0.0 if desired
@@ -430,7 +430,6 @@ func VerifyAll() error {
 
 type PactProviderTestParams struct {
 	Pacts                 string
-	PactBinPath           string
 	AuthToken             string
 	BaseURL               string
 	ProviderStateSetupURL string
