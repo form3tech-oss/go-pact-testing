@@ -36,7 +36,6 @@ type pactName struct {
 
 var (
 	pathOnce    sync.Once
-	pactPath    string
 	once        sync.Once
 	pactClient  *dsl.PactClient
 	pactServers = make(map[string]*MockServer)
@@ -139,21 +138,31 @@ func getVersion() (string, error) {
 	return version, nil
 }
 
-func setPathOnce() {
+func setBinPath() {
 	pathOnce.Do(func() {
-		topLevelDir, err := getTopLevelDir()
-		if err != nil {
-			panic(err)
+		if _, err := exec.LookPath("pact-mock-service"); err == nil {
+			return
 		}
-		pactPath = filepath.Join(topLevelDir, "pact/bin")
 
-		os.Setenv("PATH", pactPath+":"+os.Getenv("PATH"))
+		binPath := os.Getenv("PACTTESTING_PATH")
+
+		if binPath == "" {
+			topLevelDir, err := getTopLevelDir()
+
+			if err != nil {
+				panic(err)
+			}
+
+			binPath = filepath.Join(topLevelDir, "pact/bin") + ":" + filepath.Join(topLevelDir, "tools/pact/bin")
+		}
+
+		os.Setenv("PATH", os.Getenv("PATH")+":"+binPath)
 	})
 }
 
 func buildPactClientOnce() {
 	once.Do(func() {
-		setPathOnce()
+		setBinPath()
 		pactClient = dsl.NewClient()
 	})
 }
@@ -213,7 +222,7 @@ func ResetPacts() {
 	}
 }
 
-// Runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
+// TestWithStubServices runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
 func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 	defer ResetPacts()
 
@@ -327,16 +336,16 @@ func EnsurePactRunning(provider, consumer string) string {
 			bind,
 			"--port",
 			strconv.Itoa(port)}
-		setPathOnce()
-		mockServicePath := pactPath + "/pact-mock-service"
-		cmd := exec.Command(mockServicePath, args...)
+		setBinPath()
+
+		cmd := exec.Command("pact-mock-service", args...)
 
 		var outBuf bytes.Buffer
 		cmd.Stdout = &outBuf
 
 		cmd.Env = os.Environ()
 
-		log.Debugf("%s %s", mockServicePath, strings.Join(args, " "))
+		log.Debugf("%s %s", "pact-mock-service", strings.Join(args, " "))
 		err := cmd.Start()
 		if err != nil {
 			log.WithError(err).Fatalf("failed to start mock server")
