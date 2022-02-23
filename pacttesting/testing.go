@@ -56,7 +56,7 @@ func readPactFile(pactFilePath string) *pact {
 	} else {
 		file = fmt.Sprintf("%s.json", pactFilePath)
 	}
-	path := filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "pacts", file)))
+	path := filepath.FromSlash(filepath.Join(dir, "pacts", file))
 
 	pactString, err := ioutil.ReadFile(path)
 
@@ -203,7 +203,7 @@ func assignPort(provider, consumer string) int {
 func exposeServerUrl(provider, serverUrl string) {
 	viper.Set(provider, serverUrl)
 	//Also set the base url as an environment variable to remove dependency on viper
-	key := "PACTTESTING_" + strings.ToUpper(strings.Replace(provider, "-", "_", -1))
+	key := "PACTTESTING_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
 	err := os.Setenv(key, serverUrl)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to set environment variable %s", key)
@@ -323,9 +323,9 @@ func EnsurePactRunning(provider, consumer string) string {
 			"--pact-specification-version",
 			fmt.Sprintf("%d", 3),
 			"--pact-dir",
-			filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "target"))),
+			filepath.FromSlash(filepath.Join(dir, "target")),
 			"--log",
-			filepath.FromSlash(fmt.Sprintf(filepath.Join(dir, "pact", "logs")) + "/" + "pact-" + provider + ".log"),
+			filepath.FromSlash(filepath.Join(dir, "pact", "logs") + "/" + "pact-" + provider + ".log"),
 			"--consumer",
 			consumer,
 			"--provider",

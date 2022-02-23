@@ -261,7 +261,7 @@ func (s *pactTestingStage) a_mock_interaction_is_added() *pactTestingStage {
 	log.Println("adding a mock interaction")
 	start := time.Now()
 	s.test_service_a_returns_200_for_get_from_file()
-	s.interactionDuration = time.Now().Sub(start)
+	s.interactionDuration = time.Since(start)
 	return s
 }
 
