@@ -421,6 +421,7 @@ func IntegrationTesting(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 					return fmt.Errorf("pact verification failed: %v", err)
 				}
 			}
+
 			log.Infof("Pacts verified successfully!")
 			return nil
 		}
@@ -432,7 +433,8 @@ func IntegrationTesting(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 			retryOptions = defaultRetryOptions
 		}
 		if err := retry.Do(verify, retryOptions...); err != nil {
-			t.Fatalf("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed: %v", err)
+			t.Logf("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed: %v", err)
+			t.FailNow()
 		}
 	})
 }
