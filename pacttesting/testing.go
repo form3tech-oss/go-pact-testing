@@ -405,6 +405,38 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 	})
 }
 
+func IntegrationTesting(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
+	t.Helper()
+
+	TestWithStubServices(pactFilePaths, func() {
+		testFunc()
+
+		verify := func() error {
+			pacts := groupByProvider(readAllPacts(pactFilePaths))
+			for _, p := range pacts { //verify only pacts defined for this TC
+				key := p.Provider.Name + p.Consumer.Name
+				err := pactServers[key].Verify()
+
+				if err != nil {
+					return fmt.Errorf("pact verification failed: %v", err)
+				}
+			}
+			log.Infof("Pacts verified successfully!")
+			return nil
+		}
+
+		// (Re-)try verification according to the specified options (if any).
+		// If no options are specified, defaults are used.
+		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
+		if len(retryOptions) == 0 {
+			retryOptions = defaultRetryOptions
+		}
+		if err := retry.Do(verify, retryOptions...); err != nil {
+			t.Fatalf("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed: %v", err)
+		}
+	})
+}
+
 func StopMockServers() {
 	for key, s := range pactServers {
 		err := s.Stop()
