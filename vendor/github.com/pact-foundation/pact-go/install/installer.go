@@ -18,7 +18,7 @@ type Installer struct {
 
 const (
 	mockServiceRange = ">= 3.5.0, < 4.0.0"
-	verifierRange    = ">= 1.31.0, < 2.0.0"
+	verifierRange    = ">= 1.36.1, < 2.0.0"
 	brokerRange      = ">= 1.22.3"
 )
 
@@ -69,6 +69,10 @@ func (i *Installer) CheckVersion(binary, version string) error {
 
 	log.Println("[DEBUG] checking if version", v, "within semver range", versionRange)
 	constraints, err := goversion.NewConstraint(versionRange)
+	if err != nil {
+		log.Println("[DEBUG] err", err)
+		return err
+	}
 	if constraints.Check(v) {
 		log.Println("[DEBUG]", v, "satisfies constraints", v, constraints)
 		return nil
