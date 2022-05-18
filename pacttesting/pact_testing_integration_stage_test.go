@@ -2,6 +2,7 @@ package pacttesting
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -265,6 +266,12 @@ func (s *pactTestingStage) a_mock_interaction_is_added() *pactTestingStage {
 	return s
 }
 
+func (s *pactTestingStage) a_mock_server() *pactTestingStage {
+	s.test_service_a_returns_200_for_get_from_file()
+	s.testServiceApid = pactServers["testserviceago-pact-testing"].Pid
+	return s
+}
+
 func (s *pactTestingStage) no_new_server_is_started() *pactTestingStage {
 	assert.Equal(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
 	return s
@@ -319,5 +326,20 @@ func (s *pactTestingStage) pact_verification_written_to_disk() *pactTestingStage
 	_, err := os.Stat("target/go-pact-testing-testservicea.json")
 	assert.NoError(s.t, err)
 
+	return s
+}
+
+func (s *pactTestingStage) the_process_is_not_running() *pactTestingStage {
+	p, _ := os.FindProcess(s.testServiceApid)
+	// apparently os.FindProcess never returns an error on Linux
+	err := p.Kill()
+	assert.Errorf(s.t, err, "os: process already finished")
+	return s
+}
+
+func (s *pactTestingStage) the_corresponding_PID_file_is_removed() *pactTestingStage {
+	_, err := os.Stat("pact/pids/pact-testservicea-go-pact-testing.json")
+	var pathErr *fs.PathError
+	assert.ErrorAs(s.t, err, &pathErr)
 	return s
 }

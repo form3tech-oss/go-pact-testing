@@ -254,6 +254,21 @@ func TestAcc_pact_file_written_to_disk(t *testing.T) {
 		pact_verification_written_to_disk()
 }
 
+func TestAcc_mock_server_stops_cleanly(t *testing.T) {
+
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		a_mock_server()
+
+	when.
+		a_mock_server_stops()
+
+	then.
+		the_process_is_not_running().and().
+		the_corresponding_PID_file_is_removed()
+}
+
 func TestMain(m *testing.M) {
 
 	result := m.Run()
