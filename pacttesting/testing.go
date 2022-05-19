@@ -351,6 +351,11 @@ func EnsurePactRunning(provider, consumer string) string {
 			log.WithError(err).Fatalf("failed to start mock server")
 		}
 
+		// Avoid zombies
+		go func() {
+			cmd.Wait()
+		}()
+
 		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
 		mockServer = &MockServer{
 			Port:     port,
