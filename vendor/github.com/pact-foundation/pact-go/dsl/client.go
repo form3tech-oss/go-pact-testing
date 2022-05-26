@@ -70,14 +70,14 @@ type PactClient struct {
 }
 
 // newClient creates a new Pact client manager with the provided services
-func newClient(MockServiceManager client.Service, verificationServiceManager client.Service, messageServiceManager client.Service, publishServiceManager client.Service) *PactClient {
-	MockServiceManager.Setup()
+func newClient(mockServiceManager client.Service, verificationServiceManager client.Service, messageServiceManager client.Service, publishServiceManager client.Service) *PactClient {
+	mockServiceManager.Setup()
 	verificationServiceManager.Setup()
 	messageServiceManager.Setup()
 	publishServiceManager.Setup()
 
 	return &PactClient{
-		pactMockSvcManager:     MockServiceManager,
+		pactMockSvcManager:     mockServiceManager,
 		verificationSvcManager: verificationServiceManager,
 		messageSvcManager:      messageServiceManager,
 		publishSvcManager:      publishServiceManager,
@@ -97,8 +97,11 @@ func (p *PactClient) StartServer(args []string, port int) *types.MockServer {
 	svc := p.pactMockSvcManager.NewService(args)
 	cmd := svc.Start()
 
-	waitForPort(port, p.getNetworkInterface(), p.Address, p.TimeoutDuration,
+	err := waitForPort(port, p.getNetworkInterface(), p.Address, p.TimeoutDuration,
 		fmt.Sprintf(`Timed out waiting for Mock Server to start on port %d - are you sure it's running?`, port))
+	if err != nil {
+		log.Println("[ERROR] client: failed to wait for Mock Server:", err)
+	}
 
 	return &types.MockServer{
 		Pid:  cmd.Process.Pid,
@@ -132,12 +135,14 @@ func (p *PactClient) StopServer(server *types.MockServer) (*types.MockServer, er
 }
 
 // RemoveAllServers stops all remote Pact Mock Servers.
-func (p *PactClient) RemoveAllServers(server *types.MockServer) []*types.MockServer {
+func (p *PactClient) RemoveAllServers(_ *types.MockServer) []*types.MockServer {
 	log.Println("[DEBUG] client: stop server")
 
 	for _, s := range p.verificationSvcManager.List() {
 		if s != nil {
-			p.pactMockSvcManager.Stop(s.Process.Pid)
+			if _, err := p.pactMockSvcManager.Stop(s.Process.Pid); err != nil {
+				log.Println("[ERROR] client: stop server failed:", err)
+			}
 		}
 	}
 	return nil
@@ -160,7 +165,6 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 
 	err = waitForPort(port, p.getNetworkInterface(), address, p.TimeoutDuration,
 		fmt.Sprintf(`Timed out waiting for Provider API to start on port %d - are you sure it's running?`, port))
-
 	if err != nil {
 		return response, err
 	}
@@ -195,8 +199,8 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 	// Each pact is verified by line, and the results (as JSON) sent to stdout.
 	// See https://github.com/pact-foundation/pact-go/issues/88#issuecomment-404686337
 	stdOutScanner := bufio.NewScanner(stdOutPipe)
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		stdOutBuf := make([]byte, bufio.MaxScanTokenSize)
 		stdOutScanner.Buffer(stdOutBuf, 64*1024*1024)
@@ -208,13 +212,12 @@ func (p *PactClient) VerifyProvider(request types.VerifyRequest) ([]types.Provid
 
 	// Scrape errors
 	stdErrScanner := bufio.NewScanner(stdErrPipe)
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for stdErrScanner.Scan() {
 			stdErr.WriteString(fmt.Sprintf("%s\n", stdErrScanner.Text()))
 		}
-
 	}()
 
 	err = cmd.Start()
@@ -429,13 +432,13 @@ var waitForPort = func(port int, network string, address string, timeoutDuration
 func sanitiseRubyResponse(response string) string {
 	log.Println("[TRACE] response from Ruby process pre-sanitisation:", response)
 
-	r := regexp.MustCompile("(?m)^\\s*#.*$")
+	r := regexp.MustCompile(`(?m)^\s*#.*$`)
 	s := r.ReplaceAllString(response, "")
 
 	r = regexp.MustCompile("(?m).*bundle exec rake pact:verify.*$")
 	s = r.ReplaceAllString(s, "")
 
-	r = regexp.MustCompile("\\n+")
+	r = regexp.MustCompile(`\n+`)
 	s = r.ReplaceAllString(s, "\n")
 
 	return s
