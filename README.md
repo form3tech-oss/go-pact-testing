@@ -114,14 +114,14 @@ versions, so the broker can be used to check which versions are compatible.
 
 Provider tests can be written with the assistance of VerifyProviderPacts. Note that this can either be configured 
 with the pacts from the broker, or locally (which is more useful when developing pacts)
-```
+```go
 pacttesting.VerifyProviderPacts(pacttesting.PactProviderTestParams{
     Testing: t,
     Pacts:                  "build/incoming-pacts/*.json",
     AuthToken:             token,
     ProviderVersion:       "v0.0.1",
-    BaseURL:               viper.GetString(settings.ServiceName + "-address"),
-    ProviderStateSetupURL: viper.GetString(settings.ServiceName + "-address") + "/pact-setup",
+    BaseURL:               os.Getenv(settings.ServiceName + "-address"),
+    ProviderStateSetupURL: os.Getenv(settings.ServiceName + "-address") + "/pact-setup",
 })
 ``` 
 
@@ -151,7 +151,7 @@ func TestPactProviders(t *testing.T) {
 	testOrganisationId2, _ := uuid.FromString("6e9224ee-9753-47b2-b235-b155e951ab64")
 	token := buildDefaultToken(testOrganisationId, testOrganisationId2)
 
-	pactFilesFilter := viper.GetString("PACT_FILES_FILTER")
+	pactFilesFilter := os.Getenv("PACT_FILES_FILTER")
 	if pactFilesFilter == "" {
 		pactFilesFilter = "../../../build/incoming-pacts/*.json"
 	}

@@ -17,7 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pact-foundation/pact-go/dsl"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,12 +53,10 @@ func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, 
 }
 
 func (s *pactTestingStage) and() *pactTestingStage {
-
 	return s
 }
 
 func (s *pactTestingStage) the_test_is_using_a_single_pact() *pactTestingStage {
-
 	return s
 }
 
@@ -90,55 +87,48 @@ func (s *pactTestingStage) a_bulk_pact_file_with_invalid_descriptions() *pactTes
 }
 
 func (s *pactTestingStage) the_pact_for_service_a_is_called() *pactTestingStage {
-
-	s.responseA, s.errA = http.Get(fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")))
+	s.responseA, s.errA = http.Get(fmt.Sprintf("%s/v1/test", os.Getenv("testservicea")))
 
 	return s
 }
 
 func (s *pactTestingStage) the_pact_for_service_b_is_called() *pactTestingStage {
-
-	s.responseB, s.errB = http.Get(fmt.Sprintf("%s/v1/test", viper.GetString("testserviceb")))
+	s.responseB, s.errB = http.Get(fmt.Sprintf("%s/v1/test", os.Getenv("testserviceb")))
 
 	return s
 }
 
 func (s *pactTestingStage) the_response_for_service_a_should_be_200_ok() *pactTestingStage {
-
 	assert.Equal(s.t, 200, s.responseA.StatusCode)
 
 	return s
 }
-func (s *pactTestingStage) the_response_for_service_b_should_be_200_ok() *pactTestingStage {
 
+func (s *pactTestingStage) the_response_for_service_b_should_be_200_ok() *pactTestingStage {
 	assert.Equal(s.t, 200, s.responseB.StatusCode)
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_service_a() *pactTestingStage {
-
 	assert.Nil(s.t, s.errA)
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_service_b() *pactTestingStage {
-
 	assert.Nil(s.t, s.errB)
 
 	return s
 }
 
 func (s *pactTestingStage) an_error_should_be_returned_from_the_verify() *pactTestingStage {
-
 	assert.Error(s.t, VerifyAll())
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_the_verify() *pactTestingStage {
-
 	assert.NoError(s.t, VerifyAll())
 
 	return s
@@ -149,7 +139,7 @@ func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 		Testing:   s.t,
 		Pacts:     "pacttesting/providerpacts/*.json",
 		AuthToken: "anything",
-		BaseURL:   fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")),
+		BaseURL:   fmt.Sprintf("%s/v1/test", os.Getenv("testservicea")),
 	})
 
 	return s
@@ -179,7 +169,6 @@ func (s *pactTestingStage) many_small_pact_files_are_created() *pactTestingStage
 }
 
 func (s *pactTestingStage) pact_file_names_exclude_path_separator() *pactTestingStage {
-
 	_, err := os.Stat(filepath.Join(s.testCaseDir, "Request for a test endpoint ACOR.json"))
 	assert.NoError(s.t, err)
 
@@ -203,7 +192,7 @@ func (s *pactTestingStage) provider_pact_verification_is_successful() *pactTesti
 
 func (s *pactTestingStage) the_service_does_not_have_preassigned_port() *pactTestingStage {
 	assert.Nil(s.t, pactServers["testservice-prego-pact-testing"])
-	assert.Equal(s.t, "", viper.GetString("testservice-pre"))
+	assert.Equal(s.t, "", os.Getenv("testservice-pre"))
 	return s
 }
 
@@ -213,7 +202,7 @@ func (s *pactTestingStage) the_service_gets_preassigned() *pactTestingStage {
 }
 
 func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStage {
-	assert.NotEqual(s.t, "", viper.GetString("testservice-pre"))
+	assert.NotEqual(s.t, "", os.Getenv("testservice-pre"))
 	assert.NotNil(s.t, pactServers["testservice-prego-pact-testing"])
 	assert.Greater(s.t, pactServers["testservice-prego-pact-testing"].Port, 0)
 	return s
@@ -222,6 +211,7 @@ func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStag
 func (s *pactTestingStage) the_test_panics() {
 	panic("Test Panic")
 }
+
 func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStage {
 	assert.NoError(s.t, AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
 		UponReceiving("Request for a test endpoint A").
@@ -322,7 +312,6 @@ func (s *pactTestingStage) a_mock_server_stops() *pactTestingStage {
 }
 
 func (s *pactTestingStage) pact_verification_written_to_disk() *pactTestingStage {
-
 	_, err := os.Stat("target/go-pact-testing-testservicea.json")
 	assert.NoError(s.t, err)
 

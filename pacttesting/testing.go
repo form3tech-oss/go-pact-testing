@@ -19,7 +19,6 @@ import (
 	"github.com/pact-foundation/pact-go/types"
 	"github.com/pact-foundation/pact-go/utils"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 )
 
 type Pact = string
@@ -59,7 +58,6 @@ func readPactFile(pactFilePath string) *pact {
 	path := filepath.FromSlash(filepath.Join(dir, "pacts", file))
 
 	pactString, err := ioutil.ReadFile(path)
-
 	if err != nil {
 		panic(err)
 	}
@@ -115,7 +113,6 @@ func getTopLevelDir() (string, error) {
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
-
 	if err != nil {
 		return "", err
 	}
@@ -129,7 +126,6 @@ func getVersion() (string, error) {
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
-
 	if err != nil {
 		return "", err
 	}
@@ -148,7 +144,6 @@ func setBinPath() {
 
 		if binPath == "" {
 			topLevelDir, err := getTopLevelDir()
-
 			if err != nil {
 				panic(err)
 			}
@@ -167,8 +162,7 @@ func buildPactClientOnce() {
 	})
 }
 
-// PreassignPorts sets a random port for all future mocked instances and configures viper to point to them.
-// This is necessary to get viper configuration before actually loading pact files.
+// PreassignPorts sets a random port for all future mocked instances and configures environment variables to point to them.
 // This function can be called multiple times for the same files, it will only initialise them once.
 func PreassignPorts(pactFilePaths []Pact) {
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
@@ -185,7 +179,6 @@ func assignPort(provider, consumer string) int {
 	_, ok := pactServers[key]
 	if !ok {
 		port, err := utils.GetFreePort()
-
 		if err != nil {
 			panic(err)
 		}
@@ -201,8 +194,6 @@ func assignPort(provider, consumer string) int {
 }
 
 func exposeServerUrl(provider, serverUrl string) {
-	viper.Set(provider, serverUrl)
-	//Also set the base url as an environment variable to remove dependency on viper
 	key := "PACTTESTING_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
 	err := os.Setenv(key, serverUrl)
 	if err != nil {
@@ -279,7 +270,6 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 	verify := func() error {
 		key := provider + consumer
 		err := pactServers[key].Verify()
-
 		if err != nil {
 			return fmt.Errorf("pact verification failed: %v", err)
 		}
@@ -319,7 +309,8 @@ func EnsurePactRunning(provider, consumer string) string {
 		// so isn't suitable for long-running pact-servers if there is a problem that triggers stdout/stderr output.
 		// It also prevents the servers from remaining started when run from goland or compiled test binaries
 		port := assignPort(provider, consumer)
-		args := []string{"service",
+		args := []string{
+			"service",
 			"--pact-specification-version",
 			fmt.Sprintf("%d", 3),
 			"--pact-dir",
@@ -335,7 +326,8 @@ func EnsurePactRunning(provider, consumer string) string {
 			"--host",
 			bind,
 			"--port",
-			strconv.Itoa(port)}
+			strconv.Itoa(port),
+		}
 		setBinPath()
 
 		cmd := exec.Command("pact-mock-service", args...)
@@ -386,10 +378,9 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 
 		verify := func() error {
 			pacts := groupByProvider(readAllPacts(pactFilePaths))
-			for _, p := range pacts { //verify only pacts defined for this TC
+			for _, p := range pacts { // verify only pacts defined for this TC
 				key := p.Provider.Name + p.Consumer.Name
 				err := pactServers[key].Verify()
-
 				if err != nil {
 					return fmt.Errorf("pact verification failed: %v", err)
 				}
@@ -463,7 +454,6 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 		pactsFilter = filepath.Join(topLevelDir, params.Pacts)
 	}
 	urls, err := filepath.Glob(pactsFilter)
-
 	if err != nil {
 		params.Testing.Fatal(err)
 	}
@@ -498,7 +488,6 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 					}) {
 						allTestsSucceeded = false
 					}
-
 				}
 
 				t.Run("==> Writing verification.json", func(t *testing.T) {
@@ -506,19 +495,18 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 						allTestsSucceeded,
 						version)
 					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-					_ = os.MkdirAll(verificationDir+"/", 0744)
+					_ = os.MkdirAll(verificationDir+"/", 0o744)
 					verificationFile := filepath.Join(verificationDir, filename)
-					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
+					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0o644); err != nil {
 						t.Fatal(err)
 					}
 					outputJson, err := json.Marshal(response)
-
 					if err != nil {
 						t.Fatal(err)
 					}
 
 					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-					if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
+					if err := ioutil.WriteFile(outFile, outputJson, 0o644); err != nil {
 						t.Fatal(err)
 					}
 				})
