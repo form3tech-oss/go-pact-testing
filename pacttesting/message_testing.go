@@ -19,7 +19,7 @@ import (
 )
 
 func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducers dsl.MessageHandlers) {
-	buildPactClientOnce()
+	defaultServer.buildPactClientOnce()
 
 	version, err := getVersion()
 	if err != nil {
@@ -215,7 +215,7 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 	}
 
 	log.Println("[DEBUG] pact provider verification")
-	return pactClient.VerifyProvider(verificationRequest)
+	return defaultServer.pactClient.VerifyProvider(verificationRequest)
 }
 
 var waitForPort = func(port int, network string, address string, timeoutDuration time.Duration, message string) error {

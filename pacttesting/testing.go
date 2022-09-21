@@ -35,11 +35,18 @@ type pactName struct {
 }
 
 var (
-	pathOnce    sync.Once
+	pathOnce sync.Once
+)
+
+type Server struct {
 	once        sync.Once
 	pactClient  *dsl.PactClient
-	pactServers = make(map[string]*MockServer)
-)
+	pactServers map[string]*MockServer
+}
+
+var defaultServer = &Server{
+	pactServers: make(map[string]*MockServer),
+}
 
 var defaultRetryOptions = []retry.Option{
 	retry.Attempts(150000),
@@ -160,10 +167,10 @@ func setBinPath() {
 	})
 }
 
-func buildPactClientOnce() {
-	once.Do(func() {
+func (s *Server) buildPactClientOnce() {
+	s.once.Do(func() {
 		setBinPath()
-		pactClient = dsl.NewClient()
+		s.pactClient = dsl.NewClient()
 	})
 }
 
@@ -175,29 +182,29 @@ func PreassignPorts(pactFilePaths []Pact) {
 	for _, p := range pacts {
 		mockServer := loadRunningServer(p.Provider.Name, p.Consumer.Name)
 		if mockServer == nil {
-			assignPort(p.Provider.Name, p.Consumer.Name)
+			defaultServer.assignPort(p.Provider.Name, p.Consumer.Name)
 		}
 	}
 }
 
-func assignPort(provider, consumer string) int {
+func (s *Server) assignPort(provider, consumer string) int {
 	key := provider + consumer
-	_, ok := pactServers[key]
+	_, ok := s.pactServers[key]
 	if !ok {
 		port, err := utils.GetFreePort()
 
 		if err != nil {
 			panic(err)
 		}
-		pactServers[key] = &MockServer{
+		s.pactServers[key] = &MockServer{
 			Port:     port,
 			BaseURL:  fmt.Sprintf("http://%s:%d", getBindAddress(), port),
 			Consumer: consumer,
 			Provider: provider,
 		}
-		exposeServerUrl(provider, pactServers[key].BaseURL)
+		exposeServerUrl(provider, s.pactServers[key].BaseURL)
 	}
-	return pactServers[key].Port
+	return s.pactServers[key].Port
 }
 
 func exposeServerUrl(provider, serverUrl string) {
@@ -210,8 +217,8 @@ func exposeServerUrl(provider, serverUrl string) {
 	}
 }
 
-func ResetPacts() {
-	for key, pactServer := range pactServers {
+func (s *Server) ResetPacts() {
+	for key, pactServer := range s.pactServers {
 		if !pactServer.Running {
 			continue
 		}
@@ -224,22 +231,26 @@ func ResetPacts() {
 
 // TestWithStubServices runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
 func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
-	defer ResetPacts()
+	defaultServer.TestWithStubServices(pactFilePaths, testFunc)
+}
+
+func (s *Server) TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
+	defer s.ResetPacts()
 
 	PreassignPorts(pactFilePaths)
 
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 
-	for _, server := range pactServers {
+	for _, server := range s.pactServers {
 		server.DeleteInteractions()
 	}
 
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
-		EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
+		s.EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
 
 		for _, i := range p.Interactions {
-			err := pactServers[key].AddInteraction(i)
+			err := s.pactServers[key].AddInteraction(i)
 			if err != nil {
 				log.Errorf("Error adding pact: %v", err)
 			}
@@ -251,14 +262,18 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 
 // AddPact loads a pact definition from a file and ensures that stub servers are running.
 func AddPact(filename string) error {
+	return defaultServer.AddPact(filename)
+}
+
+func (s *Server) AddPact(filename string) error {
 	pactFilePaths := []string{filename}
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
-		EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
+		s.EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
 
 		for _, i := range p.Interactions {
-			err := pactServers[key].AddInteraction(i)
+			err := s.pactServers[key].AddInteraction(i)
 			if err != nil {
 				return fmt.Errorf("error adding pact from %s: %v", filename, err)
 			}
@@ -269,16 +284,16 @@ func AddPact(filename string) error {
 
 // AddPactInteraction ensures that a stub server is running for the provided provider/consumer and returns an
 // interaction to be configured
-func AddPactInteraction(provider, consumer string, interaction *dsl.Interaction) error {
+func (s *Server) AddPactInteraction(provider, consumer string, interaction *dsl.Interaction) error {
 	key := provider + consumer
-	EnsurePactRunning(provider, consumer)
-	return pactServers[key].AddInteraction(interaction)
+	s.EnsurePactRunning(provider, consumer)
+	return s.pactServers[key].AddInteraction(interaction)
 }
 
-func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option) error {
+func (s *Server) VerifyInteractions(provider, consumer string, retryOptions ...retry.Option) error {
 	verify := func() error {
 		key := provider + consumer
-		err := pactServers[key].Verify()
+		err := s.pactServers[key].Verify()
 
 		if err != nil {
 			return fmt.Errorf("pact verification failed: %v", err)
@@ -300,14 +315,14 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 	return nil
 }
 
-func EnsurePactRunning(provider, consumer string) string {
+func (s *Server) EnsurePactRunning(provider, consumer string) string {
 	dir, _ := os.Getwd()
 
 	// Allow binding to 0.0.0.0 if desired
 	bind := getBindAddress()
 
 	key := provider + consumer
-	mockServer, ok := pactServers[key]
+	mockServer, ok := s.pactServers[key]
 	if !ok || !mockServer.Running {
 		mockServer = loadRunningServer(provider, consumer)
 		if mockServer != nil {
@@ -318,24 +333,16 @@ func EnsurePactRunning(provider, consumer string) string {
 		// This is done manually rather than using pact-go's service manager code, since that pipes the output streams,
 		// so isn't suitable for long-running pact-servers if there is a problem that triggers stdout/stderr output.
 		// It also prevents the servers from remaining started when run from goland or compiled test binaries
-		port := assignPort(provider, consumer)
+		port := s.assignPort(provider, consumer)
 		args := []string{"service",
-			"--pact-specification-version",
-			fmt.Sprintf("%d", 3),
-			"--pact-dir",
-			filepath.FromSlash(filepath.Join(dir, "target")),
-			"--log",
-			filepath.FromSlash(filepath.Join(dir, "pact", "logs") + "/" + "pact-" + provider + ".log"),
-			"--consumer",
-			consumer,
-			"--provider",
-			provider,
-			"--pact-file-write-mode",
-			"merge",
-			"--host",
-			bind,
-			"--port",
-			strconv.Itoa(port)}
+			"--pact-specification-version", fmt.Sprintf("%d", 3),
+			"--pact-dir", filepath.FromSlash(filepath.Join(dir, "target")),
+			"--log", filepath.FromSlash(filepath.Join(dir, "pact", "logs") + "/" + "pact-" + provider + ".log"),
+			"--consumer", consumer,
+			"--provider", provider,
+			"--pact-file-write-mode", "merge",
+			"--host", bind,
+			"--port", strconv.Itoa(port)}
 		setBinPath()
 
 		cmd := exec.Command("pact-mock-service", args...)
@@ -374,13 +381,17 @@ func EnsurePactRunning(provider, consumer string) string {
 
 		mockServer.writePidFile()
 		exposeServerUrl(provider, mockServer.BaseURL)
-		pactServers[key] = mockServer
+		s.pactServers[key] = mockServer
 	}
 	return mockServer.BaseURL
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
 func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
+	defaultServer.RunIntegrationTest(t, pactFilePaths, testFunc, retryOptions...)
+}
+
+func (s *Server) RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
 	TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
@@ -390,7 +401,7 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 		if len(retryOptions) == 0 {
 			retryOptions = defaultRetryOptions
 		}
-		verify := func() error { return checkVerificationStatus(pactFilePaths) }
+		verify := func() error { return s.checkVerificationStatus(pactFilePaths) }
 		if err := retry.Do(verify, retryOptions...); err != nil {
 			log.Error("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed")
 			t.Errorf(err.Error())
@@ -400,6 +411,10 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
 func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
+	defaultServer.IntegrationTest(pactFilePaths, testFunc, retryOptions...)
+}
+
+func (s *Server) IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
 	TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
@@ -409,18 +424,18 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 		if len(retryOptions) == 0 {
 			retryOptions = defaultRetryOptions
 		}
-		verify := func() error { return checkVerificationStatus(pactFilePaths) }
+		verify := func() error { return s.checkVerificationStatus(pactFilePaths) }
 		if err := retry.Do(verify, retryOptions...); err != nil {
 			log.Fatalf("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed")
 		}
 	})
 }
 
-func checkVerificationStatus(pactFilePaths []Pact) error {
+func (s *Server) checkVerificationStatus(pactFilePaths []Pact) error {
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 	for _, p := range pacts { //verify only pacts defined for this TC
 		key := p.Provider.Name + p.Consumer.Name
-		err := pactServers[key].Verify()
+		err := s.pactServers[key].Verify()
 
 		if err != nil {
 			return fmt.Errorf("pact verification failed: %v", err)
@@ -431,18 +446,26 @@ func checkVerificationStatus(pactFilePaths []Pact) error {
 }
 
 func StopMockServers() {
-	for key, s := range pactServers {
-		err := s.Stop()
+	defaultServer.StopMockServers()
+}
+
+func (s *Server) StopMockServers() {
+	for key, ps := range s.pactServers {
+		err := ps.Stop()
 		if err != nil {
-			log.WithError(err).Errorf("failed to stop server for consumer(%s), provider(%s)", s.Consumer, s.Provider)
+			log.WithError(err).Errorf("failed to stop server for consumer(%s), provider(%s)", ps.Consumer, ps.Provider)
 		} else {
-			delete(pactServers, key)
+			delete(s.pactServers, key)
 		}
 	}
 }
 
 func VerifyAll() error {
-	for _, s := range pactServers {
+	return defaultServer.VerifyAll()
+}
+
+func (s *Server) VerifyAll() error {
+	for _, s := range s.pactServers {
 		if !s.Running {
 			continue
 		}
@@ -462,7 +485,11 @@ type PactProviderTestParams struct {
 }
 
 func VerifyProviderPacts(params PactProviderTestParams) {
-	buildPactClientOnce()
+	defaultServer.VerifyProviderPacts(params)
+}
+
+func (s *Server) VerifyProviderPacts(params PactProviderTestParams) {
+	s.buildPactClientOnce()
 
 	version, err := getVersion()
 	if err != nil {
@@ -504,7 +531,7 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 				ProviderStatesSetupURL: params.ProviderStateSetupURL,
 			}
 
-			responses, verifyErr := pactClient.VerifyProvider(request)
+			responses, verifyErr := s.pactClient.VerifyProvider(request)
 			allTestsSucceeded := true
 
 			for _, response := range responses {
@@ -561,8 +588,8 @@ func getBindAddress() string {
 }
 
 // clearInternalState is a hack for test purposes to simulate a test running in a different process
-func clearInternalState() {
-	pactServers = map[string]*MockServer{}
-	once = sync.Once{}
-	pactClient = &dsl.PactClient{}
+func (s *Server) clearInternalState() {
+	s.pactServers = map[string]*MockServer{}
+	s.once = sync.Once{}
+	s.pactClient = &dsl.PactClient{}
 }
