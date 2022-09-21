@@ -45,7 +45,7 @@ func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactT
 }
 
 func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
-	t.Cleanup(ResetPacts)
+	t.Cleanup(defaultServer.ResetPacts)
 	s := &pactTestingStage{
 		t: t,
 	}
@@ -202,7 +202,7 @@ func (s *pactTestingStage) provider_pact_verification_is_successful() *pactTesti
 }
 
 func (s *pactTestingStage) the_service_does_not_have_preassigned_port() *pactTestingStage {
-	assert.Nil(s.t, pactServers["testservice-prego-pact-testing"])
+	assert.Nil(s.t, defaultServer.pactServers["testservice-prego-pact-testing"])
 	assert.Equal(s.t, "", viper.GetString("testservice-pre"))
 	return s
 }
@@ -214,8 +214,8 @@ func (s *pactTestingStage) the_service_gets_preassigned() *pactTestingStage {
 
 func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStage {
 	assert.NotEqual(s.t, "", viper.GetString("testservice-pre"))
-	assert.NotNil(s.t, pactServers["testservice-prego-pact-testing"])
-	assert.Greater(s.t, pactServers["testservice-prego-pact-testing"].Port, 0)
+	assert.NotNil(s.t, defaultServer.pactServers["testservice-prego-pact-testing"])
+	assert.Greater(s.t, defaultServer.pactServers["testservice-prego-pact-testing"].Port, 0)
 	return s
 }
 
@@ -223,7 +223,7 @@ func (s *pactTestingStage) the_test_panics() {
 	panic("Test Panic")
 }
 func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStage {
-	assert.NoError(s.t, AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
+	assert.NoError(s.t, defaultServer.AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
 		UponReceiving("Request for a test endpoint A").
 		WithRequest(dsl.Request{
 			Method: "GET",
@@ -243,18 +243,18 @@ func (s *pactTestingStage) test_service_a_returns_200_for_get_from_file() *pactT
 }
 
 func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
-	s.testServiceApid = pactServers["testserviceago-pact-testing"].Pid
+	s.testServiceApid = defaultServer.pactServers["testserviceago-pact-testing"].Pid
 	return s.the_pact_for_service_a_is_called()
 }
 
 func (s *pactTestingStage) test_service_a_was_invoked() *pactTestingStage {
-	assert.NoError(s.t, VerifyInteractions("testservicea", "go-pact-testing", retry.Attempts(3)))
+	assert.NoError(s.t, defaultServer.VerifyInteractions("testservicea", "go-pact-testing", retry.Attempts(3)))
 	return s
 }
 
 func (s *pactTestingStage) the_test_completes_and_a_new_test_process_starts() *pactTestingStage {
 	// simulate the test ending and a new test starting by clearing the internal state.
-	clearInternalState()
+	defaultServer.clearInternalState()
 	return s
 }
 
@@ -268,17 +268,17 @@ func (s *pactTestingStage) a_mock_interaction_is_added() *pactTestingStage {
 
 func (s *pactTestingStage) a_mock_server() *pactTestingStage {
 	s.test_service_a_returns_200_for_get_from_file()
-	s.testServiceApid = pactServers["testserviceago-pact-testing"].Pid
+	s.testServiceApid = defaultServer.pactServers["testserviceago-pact-testing"].Pid
 	return s
 }
 
 func (s *pactTestingStage) no_new_server_is_started() *pactTestingStage {
-	assert.Equal(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
+	assert.Equal(s.t, s.testServiceApid, defaultServer.pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
 
 func (s *pactTestingStage) the_pact_server_is_manually_stopped() *pactTestingStage {
-	pid := pactServers["testserviceago-pact-testing"].Pid
+	pid := defaultServer.pactServers["testserviceago-pact-testing"].Pid
 	log.Infof("Stopping server, pid %d", pid)
 	process, err := os.FindProcess(pid)
 	assert.NoError(s.t, err)
@@ -291,7 +291,7 @@ func (s *pactTestingStage) the_pact_server_is_manually_stopped() *pactTestingSta
 }
 
 func (s *pactTestingStage) a_new_mock_server_is_started() *pactTestingStage {
-	assert.NotEqual(s.t, s.testServiceApid, pactServers["testserviceago-pact-testing"].Pid)
+	assert.NotEqual(s.t, s.testServiceApid, defaultServer.pactServers["testserviceago-pact-testing"].Pid)
 	return s
 }
 

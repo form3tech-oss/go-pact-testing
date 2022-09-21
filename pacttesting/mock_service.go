@@ -159,7 +159,7 @@ func loadRunningServer(provider, consumer string) *MockServer {
 	}
 
 	server.Running = true
-	pactServers[provider+consumer] = &server
+	defaultServer.pactServers[provider+consumer] = &server
 	exposeServerUrl(provider, server.BaseURL)
 	log.Infof("Reusing existing mock service for %s at %s, pid %d", server.Provider, server.BaseURL, server.Pid)
 	return &server
