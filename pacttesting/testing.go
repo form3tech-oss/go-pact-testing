@@ -223,7 +223,7 @@ func ResetPacts() {
 }
 
 // TestWithStubServices runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
-func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
+func TestWithStubServices(pactFilePaths []Pact, testFunc func()) error {
 	defer ResetPacts()
 
 	PreassignPorts(pactFilePaths)
@@ -234,12 +234,13 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 		server.DeleteInteractions()
 	}
 
+	var err error
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
 		EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
 
 		for _, i := range p.Interactions {
-			err := pactServers[key].AddInteraction(i)
+			err = pactServers[key].AddInteraction(i)
 			if err != nil {
 				log.Errorf("Error adding pact: %v", err)
 			}
@@ -247,6 +248,7 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) {
 	}
 
 	testFunc()
+	return err
 }
 
 // AddPact loads a pact definition from a file and ensures that stub servers are running.
@@ -380,8 +382,8 @@ func EnsurePactRunning(provider, consumer string) string {
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
-func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
-	TestWithStubServices(pactFilePaths, func() {
+func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
+	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
 		// (Re-)try verification according to the specified options (if any).
@@ -399,8 +401,8 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 }
 
 // Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
-func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) {
-	TestWithStubServices(pactFilePaths, func() {
+func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
+	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
 		// (Re-)try verification according to the specified options (if any).
