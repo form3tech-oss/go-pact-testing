@@ -3,7 +3,7 @@ module github.com/form3tech-oss/go-pact-testing/v2
 go 1.20
 
 require (
-	github.com/avast/retry-go/v3 v3.1.1
+	github.com/avast/retry-go/v4 v4.3.3
 	github.com/pact-foundation/pact-go v1.6.9
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0

@@ -3,7 +3,7 @@ Simple library for retry mechanism
 
 slightly inspired by [Try::Tiny::Retry](https://metacpan.org/pod/Try::Tiny::Retry)
 
-SYNOPSIS
+# SYNOPSIS
 
 http get with retry:
 
@@ -30,8 +30,7 @@ http get with retry:
 
 [next examples](https://github.com/avast/retry-go/tree/master/examples)
 
-
-SEE ALSO
+# SEE ALSO
 
 * [giantswarm/retry-go](https://github.com/giantswarm/retry-go) - slightly complicated interface.
 
@@ -43,35 +42,28 @@ SEE ALSO
 
 * [matryer/try](https://github.com/matryer/try) - very popular package, nonintuitive interface (for me)
 
+# BREAKING CHANGES
 
-BREAKING CHANGES
+* 4.0.0
+  - infinity retry is possible by set `Attempts(0)` by PR [#49](https://github.com/avast/retry-go/pull/49)
 
-3.0.0
+* 3.0.0
+  - `DelayTypeFunc` accepts a new parameter `err` - this breaking change affects only your custom Delay Functions. This change allow [make delay functions based on error](examples/delay_based_on_error_test.go).
 
-* `DelayTypeFunc` accepts a new parameter `err` - this breaking change affects only your custom Delay Functions. This change allow [make delay functions based on error](examples/delay_based_on_error_test.go).
+* 1.0.2 -> 2.0.0
+  - argument of `retry.Delay` is final delay (no multiplication by `retry.Units` anymore)
+  - function `retry.Units` are removed
+  - [more about this breaking change](https://github.com/avast/retry-go/issues/7)
 
-
-1.0.2 -> 2.0.0
-
-* argument of `retry.Delay` is final delay (no multiplication by `retry.Units` anymore)
-
-* function `retry.Units` are removed
-
-* [more about this breaking change](https://github.com/avast/retry-go/issues/7)
-
-
-0.3.0 -> 1.0.0
-
-* `retry.Retry` function are changed to `retry.Do` function
-
-* `retry.RetryCustom` (OnRetry) and `retry.RetryCustomWithOpts` functions are now implement via functions produces Options (aka `retry.OnRetry`)
-
-
+* 0.3.0 -> 1.0.0
+  - `retry.Retry` function are changed to `retry.Do` function
+  - `retry.RetryCustom` (OnRetry) and `retry.RetryCustomWithOpts` functions are now implement via functions produces Options (aka `retry.OnRetry`)
 */
 package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -80,19 +72,46 @@ import (
 // Function signature of retryable function
 type RetryableFunc func() error
 
+// Default timer is a wrapper around time.After
+type timerImpl struct{}
+
+func (t *timerImpl) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
 func Do(retryableFunc RetryableFunc, opts ...Option) error {
 	var n uint
 
-	//default
+	// default
 	config := newDefaultRetryConfig()
 
-	//apply opts
+	// apply opts
 	for _, opt := range opts {
 		opt(config)
 	}
 
 	if err := config.context.Err(); err != nil {
 		return err
+	}
+
+	// Setting attempts to 0 means we'll retry until we succeed
+	if config.attempts == 0 {
+		for err := retryableFunc(); err != nil; err = retryableFunc() {
+			n++
+
+			if !IsRecoverable(err) {
+				return err
+			}
+
+			config.onRetry(n, err)
+			select {
+			case <-config.timer.After(delay(config, n, err)):
+			case <-config.context.Done():
+				return config.context.Err()
+			}
+		}
+
+		return nil
 	}
 
 	var errorLog Error
@@ -102,8 +121,14 @@ func Do(retryableFunc RetryableFunc, opts ...Option) error {
 		errorLog = make(Error, 1)
 	}
 
+	attemptsForError := make(map[error]uint, len(config.attemptsForError))
+	for err, attempts := range config.attemptsForError {
+		attemptsForError[err] = attempts
+	}
+
 	lastErrIndex := n
-	for n < config.attempts {
+	shouldRetry := true
+	for shouldRetry {
 		err := retryableFunc()
 
 		if err != nil {
@@ -115,20 +140,28 @@ func Do(retryableFunc RetryableFunc, opts ...Option) error {
 
 			config.onRetry(n, err)
 
+			for errToCheck, attempts := range attemptsForError {
+				if errors.Is(err, errToCheck) {
+					attempts--
+					attemptsForError[errToCheck] = attempts
+					shouldRetry = shouldRetry && attempts > 0
+				}
+			}
+
 			// if this is last attempt - don't wait
 			if n == config.attempts-1 {
 				break
 			}
 
-			delayTime := config.delayType(n, err, config)
-			if config.maxDelay > 0 && delayTime > config.maxDelay {
-				delayTime = config.maxDelay
-			}
-
 			select {
-			case <-time.After(delayTime):
+			case <-config.timer.After(delay(config, n, err)):
 			case <-config.context.Done():
-				return config.context.Err()
+				if config.lastErrorOnly {
+					return config.context.Err()
+				}
+				n++
+				errorLog[n] = config.context.Err()
+				return errorLog[:lenWithoutNil(errorLog)]
 			}
 
 		} else {
@@ -136,6 +169,8 @@ func Do(retryableFunc RetryableFunc, opts ...Option) error {
 		}
 
 		n++
+		shouldRetry = shouldRetry && n < config.attempts
+
 		if !config.lastErrorOnly {
 			lastErrIndex = n
 		}
@@ -144,19 +179,21 @@ func Do(retryableFunc RetryableFunc, opts ...Option) error {
 	if config.lastErrorOnly {
 		return errorLog[lastErrIndex]
 	}
-	return errorLog
+	return errorLog[:lenWithoutNil(errorLog)]
 }
 
 func newDefaultRetryConfig() *Config {
 	return &Config{
-		attempts:      uint(10),
-		delay:         100 * time.Millisecond,
-		maxJitter:     100 * time.Millisecond,
-		onRetry:       func(n uint, err error) {},
-		retryIf:       IsRecoverable,
-		delayType:     CombineDelay(BackOffDelay, RandomDelay),
-		lastErrorOnly: false,
-		context:       context.Background(),
+		attempts:         uint(10),
+		attemptsForError: make(map[error]uint),
+		delay:            100 * time.Millisecond,
+		maxJitter:        100 * time.Millisecond,
+		onRetry:          func(n uint, err error) {},
+		retryIf:          IsRecoverable,
+		delayType:        CombineDelay(BackOffDelay, RandomDelay),
+		lastErrorOnly:    false,
+		context:          context.Background(),
+		timer:            &timerImpl{},
 	}
 }
 
@@ -174,6 +211,43 @@ func (e Error) Error() string {
 	}
 
 	return fmt.Sprintf("All attempts fail:\n%s", strings.Join(logWithNumber, "\n"))
+}
+
+func (e Error) Is(target error) bool {
+	for _, v := range e {
+		if errors.Is(v, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e Error) As(target interface{}) bool {
+	for _, v := range e {
+		if errors.As(v, target) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+Unwrap the last error for compatibility with `errors.Unwrap()`.
+When you need to unwrap all errors, you should use `WrappedErrors()` instead.
+
+	err := Do(
+		func() error {
+			return errors.New("original error")
+		},
+		Attempts(1),
+	)
+
+	fmt.Println(errors.Unwrap(err)) # "original error" is printed
+
+Added in version 4.2.0.
+*/
+func (e Error) Unwrap() error {
+	return e[lenWithoutNil(e)-1]
 }
 
 func lenWithoutNil(e Error) (count int) {
@@ -198,6 +272,10 @@ type unrecoverableError struct {
 	error
 }
 
+func (e unrecoverableError) Unwrap() error {
+	return e.error
+}
+
 // Unrecoverable wraps an error in `unrecoverableError` struct
 func Unrecoverable(err error) error {
 	return unrecoverableError{err}
@@ -215,4 +293,13 @@ func unpackUnrecoverable(err error) error {
 	}
 
 	return err
+}
+
+func delay(config *Config, n uint, err error) time.Duration {
+	delayTime := config.delayType(n, err, config)
+	if config.maxDelay > 0 && delayTime > config.maxDelay {
+		delayTime = config.maxDelay
+	}
+
+	return delayTime
 }
