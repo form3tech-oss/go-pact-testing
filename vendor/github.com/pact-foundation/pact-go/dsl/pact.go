@@ -687,6 +687,7 @@ func (p *Pact) VerifyMessageProviderRaw(request VerifyMessageRequest) ([]types.P
 		BrokerToken:                request.BrokerToken,
 		PublishVerificationResults: request.PublishVerificationResults,
 		ProviderVersion:            request.ProviderVersion,
+		TagWithGitBranch:           request.TagWithGitBranch,
 		ProviderTags:               request.ProviderTags,
 		Provider:                   p.Provider,
 		PactLogDir:                 p.LogDir,
@@ -774,7 +775,7 @@ func (p *Pact) VerifyMessageConsumerRaw(message *Message, handler MessageConsume
 	})
 }
 
-// VerifyMessageConsumer is a test convience function for VerifyMessageConsumerRaw,
+// VerifyMessageConsumer is a test convenience function for VerifyMessageConsumerRaw,
 // accepting an instance of `*testing.T`
 func (p *Pact) VerifyMessageConsumer(t *testing.T, message *Message, handler MessageConsumer) error {
 	err := p.VerifyMessageConsumerRaw(message, handler)
