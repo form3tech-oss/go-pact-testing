@@ -14,20 +14,20 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/pact-foundation/pact-go/dsl"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type pactTestingStage struct {
-	t         *testing.T
-	errA      error
-	errB      error
-	responseA *http.Response
-	responseB *http.Response
-
+	t                   *testing.T
+	fatalHandler        *FatalHandler
+	errA                error
+	errB                error
+	responseA           *http.Response
+	responseB           *http.Response
 	pactFilePath        string
 	pactFile            *PactFile
 	splitPactFiles      []*PactFile
@@ -37,29 +37,21 @@ type pactTestingStage struct {
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
-	s := &pactTestingStage{
-		t: t,
-	}
-
+	s := &pactTestingStage{t: t}
+	s.fatalHandler = NewFatalHandlerDefault()
 	return s, s, s
 }
 
 func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
 	t.Cleanup(ResetPacts)
-	s := &pactTestingStage{
-		t: t,
-	}
-
-	return s, s, s
+	return PactTestingTest(t)
 }
 
 func (s *pactTestingStage) and() *pactTestingStage {
-
 	return s
 }
 
 func (s *pactTestingStage) the_test_is_using_a_single_pact() *pactTestingStage {
-
 	return s
 }
 
@@ -222,6 +214,7 @@ func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStag
 func (s *pactTestingStage) the_test_panics() {
 	panic("Test Panic")
 }
+
 func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStage {
 	assert.NoError(s.t, AddPactInteraction("testservicea", "go-pact-testing", (&dsl.Interaction{}).
 		UponReceiving("Request for a test endpoint A").
@@ -297,7 +290,6 @@ func (s *pactTestingStage) a_new_mock_server_is_started() *pactTestingStage {
 
 func (s *pactTestingStage) clean_slate() *pactTestingStage {
 	os.RemoveAll("target")
-
 	return s
 }
 
@@ -317,15 +309,12 @@ func (s *pactTestingStage) pact_verification_completed() *pactTestingStage {
 
 func (s *pactTestingStage) a_mock_server_stops() *pactTestingStage {
 	StopMockServers()
-
 	return s
 }
 
 func (s *pactTestingStage) pact_verification_written_to_disk() *pactTestingStage {
-
 	_, err := os.Stat("target/go-pact-testing-testservicea.json")
 	assert.NoError(s.t, err)
-
 	return s
 }
 
@@ -341,5 +330,37 @@ func (s *pactTestingStage) the_corresponding_PID_file_is_removed() *pactTestingS
 	_, err := os.Stat("pact/pids/pact-testservicea-go-pact-testing.json")
 	var pathErr *fs.PathError
 	assert.ErrorAs(s.t, err, &pathErr)
+	return s
+}
+
+func (s *pactTestingStage) a_broken_mock_server() *pactTestingStage {
+	dname, err := os.MkdirTemp("", "pacttesting")
+	require.NoError(s.t, err)
+	s.t.Cleanup(func() {
+		_ = os.RemoveAll(dname)
+	})
+
+	fname := filepath.Join(dname, "pact-mock-service")
+	require.NoError(s.t, os.WriteFile(fname, []byte("#!/usr/bin/env sh\n\nexit 2"), 0777))
+
+	origPath := os.Getenv("PATH")
+	s.t.Cleanup(func() {
+		require.NoError(s.t, os.Setenv("PATH", origPath))
+	})
+	require.NoError(s.t, os.Setenv("PATH", fmt.Sprintf("%s:%s", dname, origPath)))
+
+	return s
+}
+
+func (s *pactTestingStage) the_mock_server_crashes_on_startup() *pactTestingStage {
+	s.fatalHandler.Handle(func() {
+		// Trigger the mock server to start.
+		_ = AddPact("testservicea.get.test")
+	})
+	return s
+}
+
+func (s *pactTestingStage) the_main_process_fails() *pactTestingStage {
+	assert.Equal(s.t, 1, s.fatalHandler.ExitCode())
 	return s
 }
