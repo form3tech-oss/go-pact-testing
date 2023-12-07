@@ -355,7 +355,10 @@ func EnsurePactRunning(provider, consumer string) string {
 
 		// Avoid zombies
 		go func() {
-			cmd.Wait()
+			err := cmd.Wait()
+			if err != nil {
+				log.WithError(err).Error("mock server exited with error")
+			}
 		}()
 
 		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
@@ -364,16 +367,20 @@ func EnsurePactRunning(provider, consumer string) string {
 			BaseURL:  serverAddress,
 			Consumer: consumer,
 			Provider: provider,
-			Pid:      cmd.Process.Pid,
-			Running:  true,
 		}
 		err = retry.Do(func() error {
-			return mockServer.call("GET", serverAddress, nil)
-		}, retry.Delay(25*time.Millisecond), retry.Attempts(200))
+			err := mockServer.call("GET", serverAddress, nil)
+			if err != nil && cmd.ProcessState != nil {
+				return retry.Unrecoverable(err)
+			}
+			return err
+		}, retry.DelayType(retry.FixedDelay), retry.Delay(100*time.Millisecond), retry.Attempts(100))
 		if err != nil {
 			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid:%d stdout: %s`, mockServer.Pid, outBuf.String())
 		}
 
+		mockServer.Pid = cmd.Process.Pid
+		mockServer.Running = true
 		mockServer.writePidFile()
 		exposeServerUrl(provider, mockServer.BaseURL)
 		pactServers[key] = mockServer

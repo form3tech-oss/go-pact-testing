@@ -269,12 +269,21 @@ func TestAcc_mock_server_stops_cleanly(t *testing.T) {
 		the_corresponding_PID_file_is_removed()
 }
 
+func TestAcc_main_process_fails_on_mock_server_startup_crash(t *testing.T) {
+	given, when, then := InlinePactTestingTest(t)
+
+	given.
+		a_broken_mock_server()
+
+	when.
+		the_mock_server_crashes_on_startup()
+
+	then.
+		the_main_process_fails()
+}
+
 func TestMain(m *testing.M) {
-
 	result := m.Run()
-
 	StopMockServers()
-
 	os.Exit(result)
-
 }
