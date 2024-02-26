@@ -2,36 +2,34 @@ package pacttesting
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 type PactRequestMatchingFilter = func(map[string]interface{})
 
-//SplitPactBulkFile reads bulk PACT files, splits it into smaller ones
-//and writes output to destination directory
+// SplitPactBulkFile reads bulk PACT files, splits it into smaller ones
+// and writes output to destination directory
 func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters ...PactRequestMatchingFilter) error {
-	//prepare output directory
+	// prepare output directory
 	if _, outputDirErr := os.Stat(outputDirPath); os.IsNotExist(outputDirErr) {
 		if newDirErr := os.MkdirAll(outputDirPath, os.ModePerm); newDirErr != nil {
-			return errors.Wrap(newDirErr, "Couldn't create output directory: "+outputDirPath)
+			return fmt.Errorf("couldn't create output directory '%s': %w", outputDirPath, newDirErr)
 		}
 	}
-	//read bulk file
-	file, fileErr := ioutil.ReadFile(bulkFilePath)
+	// read bulk file
+	file, fileErr := os.ReadFile(bulkFilePath)
 	if fileErr != nil {
-		return errors.Wrap(fileErr, "Couldn't read PACT tests from file: "+bulkFilePath)
+		return fmt.Errorf("couldn't read PACT tests from file '%s': %w", bulkFilePath, fileErr)
 	}
 	pactFile, pactFileErr := NewPactFile(file)
 	if pactFileErr != nil {
-		return errors.Wrap(pactFileErr, "Couldn't parse PACT file: "+bulkFilePath)
+		return fmt.Errorf("couldn't parse PACT file '%s': %w", bulkFilePath, pactFileErr)
 	}
-	//split into smaller files
+	// split into smaller files
 	testCases := pactFile.Split()
 	if testCases == nil {
 		return errors.New("No test cases have been found in file: " + bulkFilePath)
@@ -48,13 +46,14 @@ func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters
 
 		json, jsonErr := json.Marshal(tc)
 		if jsonErr != nil {
-			return errors.Wrap(jsonErr, "Couldn't change interaction to test case - interaction idx: "+strconv.Itoa(idx))
+			return fmt.Errorf("couldn't change interaction to test case - interaction idx: %d err: %w", idx, jsonErr)
 		}
 
 		description := sanitize(tc.Interactions[0].Description)
 		tcFilePath := filepath.Join(outputDirPath, description+".json")
-		if writeErr := ioutil.WriteFile(tcFilePath, json, os.ModePerm); writeErr != nil {
-			return errors.Wrap(writeErr, "Couldn't write test case to file - interaction idx: "+strconv.Itoa(idx)+", output file path: "+tcFilePath)
+		if writeErr := os.WriteFile(tcFilePath, json, os.ModePerm); writeErr != nil {
+			return fmt.Errorf("couldn't write test case to file - interaction idx: %d , "+
+				"output file path: %s, err: %w", idx, tcFilePath, writeErr)
 		}
 	}
 	return nil

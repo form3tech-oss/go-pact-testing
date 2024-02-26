@@ -26,8 +26,11 @@ func NewFatalHandlerDefault() *FatalHandler {
 func (h *FatalHandler) Handle(fn func()) {
 	defer func(origExitFunc func(int)) {
 		h.logger.ExitFunc = origExitFunc
-		if err := recover(); err != nil && err != errFatal {
-			panic(err)
+		if err := recover(); err != nil {
+			errTyped, ok := err.(error)
+			if !ok || !errors.Is(errTyped, errFatal) {
+				panic(err)
+			}
 		}
 	}(h.logger.ExitFunc)
 

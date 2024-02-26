@@ -48,9 +48,7 @@ func TestAcc_verify_pact_with_single_pact_file(t *testing.T) {
 }
 
 func TestAcc_verify_two_pacts_from_two_providers(t *testing.T) {
-
 	IntegrationTest([]Pact{"testservicea.get.test", "testserviceb.get.test"}, func() {
-
 		given, when, then := PactTestingTest(t)
 
 		given.
@@ -66,13 +64,10 @@ func TestAcc_verify_two_pacts_from_two_providers(t *testing.T) {
 			the_response_for_service_b_should_be_200_ok().and().
 			no_error_should_be_returned_from_service_b()
 	})
-
 }
 
 func TestAcc_first_test_with_two_providers_second_test_with_one(t *testing.T) {
-
 	IntegrationTest([]Pact{"testservicea.get.test", "testserviceb.get.test"}, func() {
-
 		given, when, then := PactTestingTest(t)
 
 		given.
@@ -90,7 +85,6 @@ func TestAcc_first_test_with_two_providers_second_test_with_one(t *testing.T) {
 	})
 
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
-
 		given, when, then := PactTestingTest(t)
 
 		given.
@@ -102,13 +96,10 @@ func TestAcc_first_test_with_two_providers_second_test_with_one(t *testing.T) {
 		then.
 			the_response_for_service_a_should_be_200_ok().and().
 			no_error_should_be_returned_from_service_a()
-
 	})
-
 }
 
 func TestProvider_Verification_Success(t *testing.T) {
-
 	given, when, then := PactTestingTest(t)
 
 	given.
@@ -119,11 +110,9 @@ func TestProvider_Verification_Success(t *testing.T) {
 
 	then.
 		provider_pact_verification_is_successful()
-
 }
 
 func TestProvider_Should_Split_Bulk_File(t *testing.T) {
-
 	given, when, then := PactTestingTest(t)
 
 	given.
@@ -134,11 +123,9 @@ func TestProvider_Should_Split_Bulk_File(t *testing.T) {
 
 	then.
 		many_small_pact_files_are_created()
-
 }
 
 func TestProvider_GeneratesPactFiles_WithValidNames(t *testing.T) {
-
 	given, when, then := PactTestingTest(t)
 
 	given.
@@ -153,7 +140,6 @@ func TestProvider_GeneratesPactFiles_WithValidNames(t *testing.T) {
 
 func TestAcc_verify_all(t *testing.T) {
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
-
 		given, when, then := PactTestingTest(t)
 
 		given.
@@ -167,11 +153,9 @@ func TestAcc_verify_all(t *testing.T) {
 			the_response_for_service_a_should_be_200_ok().and().
 			no_error_should_be_returned_from_the_verify()
 	})
-
 }
 
 func TestAcc_Preassign_Ports(t *testing.T) {
-
 	given, when, then := PactTestingTest(t)
 
 	given.
@@ -182,7 +166,6 @@ func TestAcc_Preassign_Ports(t *testing.T) {
 
 	then.
 		the_service_has_a_preassigned_port()
-
 }
 
 func TestAcc_verify_pact_with_single_pact_interactions_are_deleted(t *testing.T) {
@@ -198,7 +181,6 @@ func TestAcc_verify_pact_with_single_pact_interactions_are_deleted(t *testing.T)
 	}()
 
 	IntegrationTest([]Pact{"testservicea.get.test"}, func() {
-
 		given, when, _ := PactTestingTest(t)
 
 		given.
@@ -240,7 +222,6 @@ func TestAcc_pact_server_started(t *testing.T) {
 }
 
 func TestAcc_pact_file_written_to_disk(t *testing.T) {
-
 	given, when, then := InlinePactTestingTest(t)
 
 	given.
@@ -255,7 +236,6 @@ func TestAcc_pact_file_written_to_disk(t *testing.T) {
 }
 
 func TestAcc_mock_server_stops_cleanly(t *testing.T) {
-
 	given, when, then := InlinePactTestingTest(t)
 
 	given.

@@ -1,9 +1,9 @@
 package pacttesting
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const providerPath = "/v1/test"
+
 type pactTestingStage struct {
 	t                   *testing.T
 	fatalHandler        *FatalHandler
@@ -37,12 +39,14 @@ type pactTestingStage struct {
 }
 
 func PactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
+	t.Helper()
 	s := &pactTestingStage{t: t}
 	s.fatalHandler = NewFatalHandlerDefault()
 	return s, s, s
 }
 
 func InlinePactTestingTest(t *testing.T) (*pactTestingStage, *pactTestingStage, *pactTestingStage) {
+	t.Helper()
 	t.Cleanup(ResetPacts)
 	return PactTestingTest(t)
 }
@@ -56,7 +60,7 @@ func (s *pactTestingStage) the_test_is_using_a_single_pact() *pactTestingStage {
 }
 
 func (s *pactTestingStage) parsePactFile(fileName string) *PactFile {
-	file, fileErr := ioutil.ReadFile(fileName)
+	file, fileErr := os.ReadFile(fileName)
 	if fileErr != nil {
 		log.Fatal("Couldn't read PACT tests from file: ", fileName, ", error: ", fileErr.Error())
 	}
@@ -82,55 +86,56 @@ func (s *pactTestingStage) a_bulk_pact_file_with_invalid_descriptions() *pactTes
 }
 
 func (s *pactTestingStage) the_pact_for_service_a_is_called() *pactTestingStage {
+	url := viper.GetString("testservicea") + providerPath
+	req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, url, nil)
+	require.NoError(s.t, err)
 
-	s.responseA, s.errA = http.Get(fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")))
+	s.responseA, s.errA = http.DefaultClient.Do(req)
 
 	return s
 }
 
 func (s *pactTestingStage) the_pact_for_service_b_is_called() *pactTestingStage {
+	url := viper.GetString("testserviceb") + providerPath
+	req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, url, nil)
+	require.NoError(s.t, err)
 
-	s.responseB, s.errB = http.Get(fmt.Sprintf("%s/v1/test", viper.GetString("testserviceb")))
+	s.responseB, s.errB = http.DefaultClient.Do(req)
 
 	return s
 }
 
 func (s *pactTestingStage) the_response_for_service_a_should_be_200_ok() *pactTestingStage {
-
 	assert.Equal(s.t, 200, s.responseA.StatusCode)
 
 	return s
 }
-func (s *pactTestingStage) the_response_for_service_b_should_be_200_ok() *pactTestingStage {
 
+func (s *pactTestingStage) the_response_for_service_b_should_be_200_ok() *pactTestingStage {
 	assert.Equal(s.t, 200, s.responseB.StatusCode)
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_service_a() *pactTestingStage {
-
-	assert.Nil(s.t, s.errA)
+	require.NoError(s.t, s.errA)
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_service_b() *pactTestingStage {
-
-	assert.Nil(s.t, s.errB)
+	require.NoError(s.t, s.errB)
 
 	return s
 }
 
 func (s *pactTestingStage) an_error_should_be_returned_from_the_verify() *pactTestingStage {
-
 	assert.Error(s.t, VerifyAll())
 
 	return s
 }
 
 func (s *pactTestingStage) no_error_should_be_returned_from_the_verify() *pactTestingStage {
-
 	assert.NoError(s.t, VerifyAll())
 
 	return s
@@ -141,7 +146,7 @@ func (s *pactTestingStage) provider_pacts_are_verified() *pactTestingStage {
 		Testing:   s.t,
 		Pacts:     "pacttesting/providerpacts/*.json",
 		AuthToken: "anything",
-		BaseURL:   fmt.Sprintf("%s/v1/test", viper.GetString("testservicea")),
+		BaseURL:   viper.GetString("testservicea") + providerPath,
 	})
 
 	return s
@@ -161,9 +166,9 @@ func (s *pactTestingStage) file_is_split() *pactTestingStage {
 }
 
 func (s *pactTestingStage) many_small_pact_files_are_created() *pactTestingStage {
-	assert.Equal(s.t, 2, len(s.splitPactFiles), "Not all tests cases have been created")
+	assert.Len(s.t, s.splitPactFiles, 2, "Not all tests cases have been created")
 	for _, f := range s.splitPactFiles {
-		assert.Equal(s.t, 1, len(f.Interactions), "Each test case should have only one interaction")
+		assert.Len(s.t, f.Interactions, 1, "Each test case should have only one interaction")
 	}
 	assert.Equal(s.t, "Request for a test endpoint A", s.splitPactFiles[0].Interactions[0].Description)
 	assert.Equal(s.t, "Request for a test endpoint B", s.splitPactFiles[1].Interactions[0].Description)
@@ -171,21 +176,20 @@ func (s *pactTestingStage) many_small_pact_files_are_created() *pactTestingStage
 }
 
 func (s *pactTestingStage) pact_file_names_exclude_path_separator() *pactTestingStage {
-
 	_, err := os.Stat(filepath.Join(s.testCaseDir, "Request for a test endpoint ACOR.json"))
-	assert.NoError(s.t, err)
+	require.NoError(s.t, err)
 
 	_, err = os.Stat(filepath.Join(s.testCaseDir, "Request for a test endpoint BB2B.json"))
-	assert.NoError(s.t, err)
+	require.NoError(s.t, err)
 
 	return s
 }
 
 func (s *pactTestingStage) provider_pact_verification_is_successful() *pactTestingStage {
-	_, filename, _, _ := runtime.Caller(0)
+	_, filename, _, _ := runtime.Caller(0) //nolint:dogsled // stdlib source
 	dir := filename[0:strings.LastIndex(filename, "/")]
-	b, err := ioutil.ReadFile(dir + "/../build/pact-verifications/providerA.json")
-	assert.Nil(s.t, err)
+	b, err := os.ReadFile(filepath.Join(dir, "../build/pact-verifications/providerA.json"))
+	require.NoError(s.t, err)
 
 	str := string(b)
 	assert.Contains(s.t, str, "\"success\": true")
@@ -220,7 +224,7 @@ func (s *pactTestingStage) test_service_a_returns_200_for_get() *pactTestingStag
 		UponReceiving("Request for a test endpoint A").
 		WithRequest(dsl.Request{
 			Method: "GET",
-			Path:   dsl.String("/v1/test"),
+			Path:   dsl.String(providerPath),
 		}).
 		WillRespondWith(dsl.Response{
 			Status:  200,
@@ -274,11 +278,11 @@ func (s *pactTestingStage) the_pact_server_is_manually_stopped() *pactTestingSta
 	pid := pactServers["testserviceago-pact-testing"].Pid
 	log.Infof("Stopping server, pid %d", pid)
 	process, err := os.FindProcess(pid)
-	assert.NoError(s.t, err)
+	require.NoError(s.t, err)
 	err = process.Signal(syscall.SIGKILL)
-	assert.NoError(s.t, err)
+	require.NoError(s.t, err)
 	err = process.Kill()
-	assert.NoError(s.t, err)
+	require.NoError(s.t, err)
 	log.Println("server has been manually stopped")
 	return s
 }
@@ -341,7 +345,8 @@ func (s *pactTestingStage) a_broken_mock_server() *pactTestingStage {
 	})
 
 	fname := filepath.Join(dname, "pact-mock-service")
-	require.NoError(s.t, os.WriteFile(fname, []byte("#!/usr/bin/env sh\n\nexit 2"), 0777))
+	require.NoError(s.t, os.WriteFile(fname, []byte("#!/usr/bin/env sh\n\nexit 2"), 0o600))
+	require.NoError(s.t, os.Chmod(fname, 0o700))
 
 	origPath := os.Getenv("PATH")
 	s.t.Cleanup(func() {

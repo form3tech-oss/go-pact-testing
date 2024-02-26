@@ -3,12 +3,13 @@ package pacttesting
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"github.com/pact-foundation/pact-go/types"
 	"github.com/pact-foundation/pact-go/utils"
 )
+
+const providerHTTPScheme = "http://"
 
 func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducers dsl.MessageHandlers) {
 	buildPactClientOnce()
@@ -74,39 +77,37 @@ func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducer
 				}
 
 				t.Run("==> Writing verification.json", func(t *testing.T) {
-					verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
+					verificationJSON := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
 						err == nil && allTestsSucceeded,
 						version)
 					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-					_ = os.MkdirAll(verificationDir+"/", 0744)
+					_ = os.MkdirAll(verificationDir+"/", 0o744)
 					verificationFile := filepath.Join(verificationDir, filename)
-					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
+					if err := os.WriteFile(verificationFile, []byte(verificationJSON), 0o600); err != nil {
 						t.Fatal(err)
 					}
-					outputJson, err := json.Marshal(response)
-
+					outputJSON, err := json.Marshal(response)
 					if err != nil {
 						t.Fatal(err)
 					}
 
 					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-					if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
+					if err := os.WriteFile(outFile, outputJSON, 0o600); err != nil {
 						t.Fatal(err)
 					}
 				})
 			}
-
 		})
 	}
 }
 
-var messageHandler = func(messageHandlers dsl.MessageHandlers, stateHandlers dsl.StateHandlers) http.HandlerFunc {
+func messageHandler(messageHandlers dsl.MessageHandlers, stateHandlers dsl.StateHandlers) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 		// Extract message
 		var message dsl.Message
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		r.Body.Close()
 
 		if err != nil {
@@ -114,7 +115,11 @@ var messageHandler = func(messageHandlers dsl.MessageHandlers, stateHandlers dsl
 			return
 		}
 
-		json.Unmarshal(body, &message)
+		err = json.Unmarshal(body, &message)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
 		// Setup any provider state
 		for _, state := range message.States {
@@ -157,18 +162,21 @@ var messageHandler = func(messageHandlers dsl.MessageHandlers, stateHandlers dsl
 		resBody, errM := json.Marshal(wrappedResponse)
 		if errM != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Println("[ERROR] error marshalling objcet:", errM)
+			log.Println("[ERROR] error marshalling objcet:", errM)
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write(resBody)
+		_, _ = w.Write(resBody)
 	}
 }
 
 // VerifyMessageProviderRaw runs provider message verification.
-func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyMessageRequest) ([]types.ProviderVerifierResponse, error) {
-	response := []types.ProviderVerifierResponse{}
+func VerifyMessageProviderRaw(
+	params PactProviderTestParams,
+	request dsl.VerifyMessageRequest,
+) ([]types.ProviderVerifierResponse, error) {
+	emptyResponse := []types.ProviderVerifierResponse{}
 
 	// Starts the message wrapper API with hooks back to the message handlers
 	// This maps the 'description' field of a message pact, to a function handler
@@ -178,12 +186,12 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 
 	port, err := utils.GetFreePort()
 	if err != nil {
-		return response, fmt.Errorf("unable to allocate a port for verification: %v", err)
+		return emptyResponse, fmt.Errorf("unable to allocate a port for verification: %w", err)
 	}
 
 	// Construct verifier request
 	verificationRequest := types.VerifyRequest{
-		ProviderBaseURL:            fmt.Sprintf("http://%s:%d", getBindAddress(), port),
+		ProviderBaseURL:            providerHTTPScheme + net.JoinHostPort(getBindAddress(), strconv.Itoa(port)),
 		PactURLs:                   request.PactURLs,
 		BrokerURL:                  request.BrokerURL,
 		Tags:                       request.Tags,
@@ -203,22 +211,31 @@ func VerifyMessageProviderRaw(params PactProviderTestParams, request dsl.VerifyM
 	}
 	defer ln.Close()
 
+	server := http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
 	log.Printf("[DEBUG] API handler starting: port %d (%s)", port, ln.Addr())
-	go http.Serve(ln, mux)
+	go func() { _ = server.Serve(ln) }()
 
 	portErr := waitForPort(port, "tcp", getBindAddress(), 5*time.Second,
 		fmt.Sprintf(`Timed out waiting for Daemon on port %d - are you sure it's running?`, port))
 
 	if portErr != nil {
-		log.Fatal("Error:", err)
-		return response, portErr
+		log.Print("Error:", err)
+		return emptyResponse, portErr
 	}
 
 	log.Println("[DEBUG] pact provider verification")
-	return pactClient.VerifyProvider(verificationRequest)
+	response, err := pactClient.VerifyProvider(verificationRequest)
+	if err != nil {
+		return emptyResponse, fmt.Errorf("pact provider verification: %w", err)
+	}
+	return response, nil
 }
 
-var waitForPort = func(port int, network string, address string, timeoutDuration time.Duration, message string) error {
+func waitForPort(port int, network string, address string, timeoutDuration time.Duration, message string) error {
 	log.Println("[DEBUG] waiting for port", port, "to become available")
 	timeout := time.After(timeoutDuration)
 
