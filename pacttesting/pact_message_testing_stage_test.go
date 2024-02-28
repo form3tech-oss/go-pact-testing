@@ -12,16 +12,17 @@ type pactMessageTestingStage struct {
 	messageProducers dsl.MessageHandlers
 }
 
-func PactMessageTestingTest(t *testing.T) (*pactMessageTestingStage, *pactMessageTestingStage, *pactMessageTestingStage) {
+func PactMessageTestingTest(t *testing.T) (
+	*pactMessageTestingStage,
+	*pactMessageTestingStage,
+	*pactMessageTestingStage,
+) {
+	t.Helper()
 	s := &pactMessageTestingStage{
 		t: t,
 	}
 
 	return s, s, s
-}
-
-func (s *pactMessageTestingStage) and() *pactMessageTestingStage {
-	return s
 }
 
 type testMessage struct {
@@ -33,14 +34,14 @@ type testMessage struct {
 
 func (s *pactMessageTestingStage) message_producers_are_configured() *pactMessageTestingStage {
 	s.messageProducers = dsl.MessageHandlers{
-		"message 1": func(message dsl.Message) (interface{}, error) {
+		"message 1": func(dsl.Message) (interface{}, error) {
 			return "Hello, Pact Message Verifier", nil
 		},
-		"message 2": func(message dsl.Message) (interface{}, error) {
+		"message 2": func(dsl.Message) (interface{}, error) {
 			return &testMessage{
 				One:    "First Entry",
 				Two:    "Second entry",
-				Random: rand.Int(),
+				Random: rand.Int(), //nolint:gosec //test only use
 				List:   []string{"a", "b", "c"},
 			}, nil
 		},
@@ -57,5 +58,4 @@ func (s *pactMessageTestingStage) messages_are_verified_against_pacts() {
 }
 
 func (s *pactMessageTestingStage) validation_is_successful() {
-
 }

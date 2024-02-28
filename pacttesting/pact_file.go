@@ -2,9 +2,10 @@ package pacttesting
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
-//PactFile describes expectations between provider and consumer
+// PactFile describes expectations between provider and consumer
 type PactFile struct {
 	Provider struct {
 		Name string `json:"name"`
@@ -21,18 +22,18 @@ type PactFile struct {
 	Metadata interface{} `json:"metadata"`
 }
 
-//NewPactFile create new PACT file representation
+// NewPactFile create new PACT file representation
 func NewPactFile(data []byte) (*PactFile, error) {
 	pactFile := &PactFile{}
 	err := json.Unmarshal(data, pactFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshaling pack file: %w", err)
 	}
 	return pactFile, nil
 }
 
-//Split divides bulk file with many interactions to single-interaction PACT files.
-//It's required as a workaround to make bigger PACT test runs working.
+// Split divides bulk file with many interactions to single-interaction PACT files.
+// It's required as a workaround to make bigger PACT test runs working.
 func (f *PactFile) Split() *[]*PactFile {
 	interactionsCount := len(f.Interactions)
 	if interactionsCount == 0 {

@@ -1,0 +1,99 @@
+# Using golangci-lint@v1.56.2
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor$
+  build-tags:
+    - all
+output:
+  print-linter-name: true
+linters:
+  enable-all: true
+  fast: false
+  disable:
+    # Deprecated (see https://golangci-lint.run/usage/linters/)
+    - deadcode
+    - golint
+    - ifshort
+    - interfacer
+    - maligned
+    - nosnakecase
+    - scopelint
+    - structcheck
+    - varcheck
+    - exhaustivestruct
+
+    # Style guides that are very subjective
+    - funlen
+    - nlreturn
+    - wsl
+    - cyclop
+    - varnamelen
+    - maintidx
+    - gocognit
+    - godot
+    - gocyclo
+    - nestif
+    - nilnil
+    - tagliatelle
+    - ireturn
+    - gomnd
+
+    # Dynamic errors are OK here
+    - goerr113
+
+    # We don't need to limit dependencies or replacements
+    - gomoddirectives
+
+    # Too many false positives for structs with optional fields
+    - exhaustruct
+
+    # Requires massive test rewrite
+    - testpackage
+
+    # Most tests can't run in parallel
+    - paralleltest
+
+linters-settings:
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/pkg/errors"
+            desc: Use standard library errors package
+  exhaustive:
+    default-signifies-exhaustive: true
+  errcheck:
+    check-blank: false
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/form3tech-oss)
+      - prefix(github.com/form3tech-oss/go-pact-testing)
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - unparam
+        - errcheck
+        - bodyclose
+    - path: _test\.go
+      # ST1003: Poorly chosen identifiers (https://staticcheck.io/docs/checks/#ST1003)
+      # This is to allow identifiers to be snake_cased in favor of BDD integration tests
+      text: "ST1003"
+      linters:
+        - stylecheck
+    - path: _test\.go
+      # This is to allow identifiers to be snake_cased in favor of BDD integration tests
+      text: "var-naming: don't use underscores in Go names;"
+      linters:
+        - revive
+    - path: _test\.go
+      # This is to allow stages to be private strcts
+      text: "unexported-return: exported func"
+      linters:
+        - revive

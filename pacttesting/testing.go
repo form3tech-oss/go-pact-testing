@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +34,7 @@ type pactName struct {
 	Name string `json:"name"`
 }
 
+//nolint:gochecknoglobals // fixing is a breaking API change
 var (
 	pathOnce    sync.Once
 	once        sync.Once
@@ -41,10 +42,12 @@ var (
 	pactServers = make(map[string]*MockServer)
 )
 
-var defaultRetryOptions = []retry.Option{
-	retry.Attempts(150000),
-	retry.Delay(200 * time.Millisecond),
-	retry.DelayType(retry.FixedDelay),
+func defaultRetryOptions() []retry.Option {
+	return []retry.Option{
+		retry.Attempts(150000),
+		retry.Delay(200 * time.Millisecond),
+		retry.DelayType(retry.FixedDelay),
+	}
 }
 
 func readPactFile(pactFilePath string) *pact {
@@ -54,19 +57,17 @@ func readPactFile(pactFilePath string) *pact {
 	if strings.HasSuffix(pactFilePath, ".json") {
 		file = pactFilePath
 	} else {
-		file = fmt.Sprintf("%s.json", pactFilePath)
+		file = pactFilePath + ".json"
 	}
 	path := filepath.FromSlash(filepath.Join(dir, "pacts", file))
 
-	pactString, err := ioutil.ReadFile(path)
-
+	pactString, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
 
 	p := &pact{}
 	err = json.Unmarshal(pactString, p)
-
 	if err != nil {
 		panic(err)
 	}
@@ -75,18 +76,15 @@ func readPactFile(pactFilePath string) *pact {
 }
 
 func readAllPacts(pacts []string) []*pact {
-	var results []*pact
-
-	for _, p := range pacts {
-		results = append(results, readPactFile(p))
+	results := make([]*pact, len(pacts))
+	for i, p := range pacts {
+		results[i] = readPactFile(p)
 	}
 
 	return results
 }
 
 func groupByProvider(pacts []*pact) []*pact {
-	var results []*pact
-
 	pactMap := make(map[string]*pact)
 
 	for _, p := range pacts {
@@ -103,8 +101,11 @@ func groupByProvider(pacts []*pact) []*pact {
 		}
 	}
 
+	results := make([]*pact, len(pactMap))
+	i := 0
 	for _, v := range pactMap {
-		results = append(results, v)
+		results[i] = v
+		i++
 	}
 
 	return results
@@ -115,9 +116,8 @@ func getTopLevelDir() (string, error) {
 	var out bytes.Buffer
 	gitCommand.Stdout = &out
 	err := gitCommand.Run()
-
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting git top level dir: %w", err)
 	}
 
 	topLevelDir := strings.TrimRight(out.String(), "\n")
@@ -127,11 +127,12 @@ func getTopLevelDir() (string, error) {
 func getVersion() (string, error) {
 	gitCommand := exec.Command("git", "describe", "--tags")
 	var out bytes.Buffer
+	var errOut bytes.Buffer
 	gitCommand.Stdout = &out
+	gitCommand.Stderr = &errOut
 	err := gitCommand.Run()
-
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting git version: %w; out: %s", err, errOut.String())
 	}
 
 	version := strings.TrimRight(out.String(), "\n")
@@ -148,7 +149,6 @@ func setBinPath() {
 
 		if binPath == "" {
 			topLevelDir, err := getTopLevelDir()
-
 			if err != nil {
 				panic(err)
 			}
@@ -185,26 +185,25 @@ func assignPort(provider, consumer string) int {
 	_, ok := pactServers[key]
 	if !ok {
 		port, err := utils.GetFreePort()
-
 		if err != nil {
 			panic(err)
 		}
 		pactServers[key] = &MockServer{
 			Port:     port,
-			BaseURL:  fmt.Sprintf("http://%s:%d", getBindAddress(), port),
+			BaseURL:  providerHTTPScheme + net.JoinHostPort(getBindAddress(), strconv.Itoa(port)),
 			Consumer: consumer,
 			Provider: provider,
 		}
-		exposeServerUrl(provider, pactServers[key].BaseURL)
+		exposeServerURL(provider, pactServers[key].BaseURL)
 	}
 	return pactServers[key].Port
 }
 
-func exposeServerUrl(provider, serverUrl string) {
-	viper.Set(provider, serverUrl)
-	//Also set the base url as an environment variable to remove dependency on viper
+func exposeServerURL(provider, serverURL string) {
+	viper.Set(provider, serverURL)
+	// Also set the base url as an environment variable to remove dependency on viper
 	key := "PACTTESTING_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
-	err := os.Setenv(key, serverUrl)
+	err := os.Setenv(key, serverURL)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to set environment variable %s", key)
 	}
@@ -222,7 +221,8 @@ func ResetPacts() {
 	}
 }
 
-// TestWithStubServices runs testFunc with stub services defined by given pacts. Does not verify that the stubs are called
+// TestWithStubServices runs testFunc with stub services defined by given pacts.
+// Does not verify that the stubs are called
 func TestWithStubServices(pactFilePaths []Pact, testFunc func()) error {
 	defer ResetPacts()
 
@@ -231,7 +231,10 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) error {
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 
 	for _, server := range pactServers {
-		server.DeleteInteractions()
+		err := server.DeleteInteractions()
+		if err != nil {
+			log.WithError(err).Errorf("Error deleting interactions")
+		}
 	}
 
 	var err error
@@ -262,7 +265,7 @@ func AddPact(filename string) error {
 		for _, i := range p.Interactions {
 			err := pactServers[key].AddInteraction(i)
 			if err != nil {
-				return fmt.Errorf("error adding pact from %s: %v", filename, err)
+				return fmt.Errorf("error adding pact from %s: %w", filename, err)
 			}
 		}
 	}
@@ -281,9 +284,8 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 	verify := func() error {
 		key := provider + consumer
 		err := pactServers[key].Verify()
-
 		if err != nil {
-			return fmt.Errorf("pact verification failed: %v", err)
+			return fmt.Errorf("pact verification failed: %w", err)
 		}
 		log.Infof("Pacts verified successfully!")
 		return nil
@@ -293,7 +295,7 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 	// If no options are specified, defaults are used.
 	// Otherwise, it is assumed the caller wants full control of the retry behaviour.
 	if len(retryOptions) == 0 {
-		retryOptions = defaultRetryOptions
+		retryOptions = defaultRetryOptions()
 	}
 	cwd, _ := os.Getwd()
 	if err := retry.Do(verify, retryOptions...); err != nil {
@@ -321,9 +323,10 @@ func EnsurePactRunning(provider, consumer string) string {
 		// so isn't suitable for long-running pact-servers if there is a problem that triggers stdout/stderr output.
 		// It also prevents the servers from remaining started when run from goland or compiled test binaries
 		port := assignPort(provider, consumer)
-		args := []string{"service",
+		args := []string{
+			"service",
 			"--pact-specification-version",
-			fmt.Sprintf("%d", 3),
+			"3",
 			"--pact-dir",
 			filepath.FromSlash(filepath.Join(dir, "target")),
 			"--log",
@@ -337,7 +340,8 @@ func EnsurePactRunning(provider, consumer string) string {
 			"--host",
 			bind,
 			"--port",
-			strconv.Itoa(port)}
+			strconv.Itoa(port),
+		}
 		setBinPath()
 
 		cmd := exec.Command("pact-mock-service", args...)
@@ -361,7 +365,7 @@ func EnsurePactRunning(provider, consumer string) string {
 			}
 		}()
 
-		serverAddress := fmt.Sprintf("http://%s:%d", bind, port)
+		serverAddress := providerHTTPScheme + net.JoinHostPort(bind, strconv.Itoa(port))
 		mockServer = &MockServer{
 			Port:     port,
 			BaseURL:  serverAddress,
@@ -371,25 +375,32 @@ func EnsurePactRunning(provider, consumer string) string {
 		err = retry.Do(func() error {
 			err := mockServer.call("GET", serverAddress, nil)
 			if err != nil && cmd.ProcessState != nil {
-				return retry.Unrecoverable(err)
+				return fmt.Errorf("calling mock server: %w", retry.Unrecoverable(err))
 			}
 			return err
 		}, retry.DelayType(retry.FixedDelay), retry.Delay(100*time.Millisecond), retry.Attempts(100))
 		if err != nil {
-			log.WithError(err).Fatalf(`timed out waiting for mock server to report healthy, pid:%d stdout: %s`, mockServer.Pid, outBuf.String())
+			log.
+				WithError(err).
+				Fatalf(`timed out waiting for mock server to report healthy, pid:%d stdout: %s`,
+					mockServer.Pid,
+					outBuf.String(),
+				)
 		}
 
 		mockServer.Pid = cmd.Process.Pid
 		mockServer.Running = true
 		mockServer.writePidFile()
-		exposeServerUrl(provider, mockServer.BaseURL)
+		exposeServerURL(provider, mockServer.BaseURL)
 		pactServers[key] = mockServer
 	}
 	return mockServer.BaseURL
 }
 
-// Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
+// Runs mock services defined by the given pacts,
+// invokes testFunc then verifies that the pacts have been invoked successfully
 func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
+	t.Helper()
 	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
@@ -397,17 +408,19 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 		// If no options are specified, defaults are used.
 		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
 		if len(retryOptions) == 0 {
-			retryOptions = defaultRetryOptions
+			retryOptions = defaultRetryOptions()
 		}
 		verify := func() error { return checkVerificationStatus(pactFilePaths) }
 		if err := retry.Do(verify, retryOptions...); err != nil {
-			log.Error("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed")
+			log.Error("Pact verification failed!!" +
+				"For more info on the error check the logs/pact*.log files, they are quite detailed")
 			t.Errorf(err.Error())
 		}
 	})
 }
 
-// Runs mock services defined by the given pacts, invokes testFunc then verifies that the pacts have been invoked successfully
+// Runs mock services defined by the given pacts,
+// invokes testFunc then verifies that the pacts have been invoked successfully
 func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
 	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
@@ -416,23 +429,23 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 		// If no options are specified, defaults are used.
 		// Otherwise, it is assumed the caller wants full control of the retry behaviour.
 		if len(retryOptions) == 0 {
-			retryOptions = defaultRetryOptions
+			retryOptions = defaultRetryOptions()
 		}
 		verify := func() error { return checkVerificationStatus(pactFilePaths) }
 		if err := retry.Do(verify, retryOptions...); err != nil {
-			log.Fatalf("Pact verification failed!! For more info on the error check the logs/pact*.log files, they are quite detailed")
+			log.Fatalf("Pact verification failed!!" +
+				"For more info on the error check the logs/pact*.log files, they are quite detailed")
 		}
 	})
 }
 
 func checkVerificationStatus(pactFilePaths []Pact) error {
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
-	for _, p := range pacts { //verify only pacts defined for this TC
+	for _, p := range pacts { // verify only pacts defined for this TC
 		key := p.Provider.Name + p.Consumer.Name
 		err := pactServers[key].Verify()
-
 		if err != nil {
-			return fmt.Errorf("pact verification failed: %v", err)
+			return fmt.Errorf("pact verification failed: %w", err)
 		}
 	}
 	log.Infof("Pacts verified successfully!")
@@ -485,14 +498,13 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 		return
 	}
 
-	pactsFilter := ""
+	var pactsFilter string
 	if filepath.IsAbs(params.Pacts) {
 		pactsFilter = params.Pacts
 	} else {
 		pactsFilter = filepath.Join(topLevelDir, params.Pacts)
 	}
 	urls, err := filepath.Glob(pactsFilter)
-
 	if err != nil {
 		params.Testing.Fatal(err)
 	}
@@ -527,27 +539,25 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 					}) {
 						allTestsSucceeded = false
 					}
-
 				}
 
 				t.Run("==> Writing verification.json", func(t *testing.T) {
-					verificationJson := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
+					verificationJSON := fmt.Sprintf("{\"success\": %v,\"providerApplicationVersion\": \"%s\"}",
 						allTestsSucceeded,
 						version)
 					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-					_ = os.MkdirAll(verificationDir+"/", 0744)
+					_ = os.MkdirAll(verificationDir+"/", 0o744)
 					verificationFile := filepath.Join(verificationDir, filename)
-					if err := ioutil.WriteFile(verificationFile, []byte(verificationJson), 0644); err != nil {
+					if err := os.WriteFile(verificationFile, []byte(verificationJSON), 0o600); err != nil {
 						t.Fatal(err)
 					}
-					outputJson, err := json.Marshal(response)
-
+					outputJSON, err := json.Marshal(response)
 					if err != nil {
 						t.Fatal(err)
 					}
 
 					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-					if err := ioutil.WriteFile(outFile, outputJson, 0644); err != nil {
+					if err := os.WriteFile(outFile, outputJSON, 0o600); err != nil {
 						t.Fatal(err)
 					}
 				})
