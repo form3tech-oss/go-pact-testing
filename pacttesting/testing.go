@@ -163,7 +163,7 @@ func setBinPath() {
 func buildPactClientOnce() {
 	once.Do(func() {
 		setBinPath()
-		pactClient = dsl.NewClient()
+		pactClient = dsl.NewClient("")
 	})
 }
 
