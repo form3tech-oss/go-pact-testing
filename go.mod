@@ -1,6 +1,6 @@
 module github.com/form3tech-oss/go-pact-testing/v2
 
-go 1.20
+go 1.24
 
 require (
 	github.com/avast/retry-go/v4 v4.5.1

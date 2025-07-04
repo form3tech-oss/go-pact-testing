@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avast/retry-go/v4"
+	retry "github.com/avast/retry-go/v4"
 	"github.com/pact-foundation/pact-go/dsl"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
