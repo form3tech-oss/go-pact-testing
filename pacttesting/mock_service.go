@@ -26,10 +26,10 @@ type MockServer struct {
 }
 
 const (
-	pidDirMode         = 0o755
-	pidFileMode        = 0o600
-	stopRetryAttempts  = 25
-	stopRetryDelay     = 200 * time.Millisecond
+	pidDirMode        = 0o755
+	pidFileMode       = 0o600
+	stopRetryAttempts = 25
+	stopRetryDelay    = 200 * time.Millisecond
 )
 
 // call sends a message to the Pact service
@@ -127,7 +127,7 @@ func (m *MockServer) Stop() error {
 				return errors.New("server process is still alive")
 			}
 			return nil
-			}, retrygo.Attempts(stopRetryAttempts), retrygo.Delay(stopRetryDelay), retrygo.DelayType(retrygo.FixedDelay)); err != nil {
+		}, retrygo.Attempts(stopRetryAttempts), retrygo.Delay(stopRetryDelay), retrygo.DelayType(retrygo.FixedDelay)); err != nil {
 			err = p.Kill()
 			if err != nil {
 				return fmt.Errorf("failed to kill process: %w", err)

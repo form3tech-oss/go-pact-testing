@@ -22,11 +22,11 @@ import (
 const providerHTTPScheme = "http://"
 
 const (
-	verificationDirMode      = 0o744
-	verificationFileMode     = 0o600
-	messageReadHeaderTimeout = 3 * time.Second
+	verificationDirMode       = 0o744
+	verificationFileMode      = 0o600
+	messageReadHeaderTimeout  = 3 * time.Second
 	messageWaitForPortTimeout = 5 * time.Second
-	waitForPortPollInterval  = 50 * time.Millisecond
+	waitForPortPollInterval   = 50 * time.Millisecond
 )
 
 func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducers dsl.MessageHandlers) {

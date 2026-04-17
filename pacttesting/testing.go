@@ -35,10 +35,10 @@ type pactName struct {
 }
 
 const (
-	defaultRetryAttempts        = 150000
-	defaultRetryDelay           = 200 * time.Millisecond
-	mockServerHealthAttempts    = 100
-	mockServerHealthDelay       = 100 * time.Millisecond
+	defaultRetryAttempts         = 150000
+	defaultRetryDelay            = 200 * time.Millisecond
+	mockServerHealthAttempts     = 100
+	mockServerHealthDelay        = 100 * time.Millisecond
 	providerVerificationDirMode  = 0o744
 	providerVerificationFileMode = 0o600
 )
@@ -423,7 +423,7 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 		if err := retrygo.Do(verify, retryOptions...); err != nil {
 			log.Error("Pact verification failed!!" +
 				"For more info on the error check the logs/pact*.log files, they are quite detailed")
-				t.Error(err)
+			t.Error(err)
 		}
 	})
 }
