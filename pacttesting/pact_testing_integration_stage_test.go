@@ -211,7 +211,7 @@ func (s *pactTestingStage) the_service_gets_preassigned() *pactTestingStage {
 func (s *pactTestingStage) the_service_has_a_preassigned_port() *pactTestingStage {
 	assert.NotEqual(s.t, "", viper.GetString("testservice-pre"))
 	assert.NotNil(s.t, pactServers["testservice-prego-pact-testing"])
-	assert.Greater(s.t, pactServers["testservice-prego-pact-testing"].Port, 0)
+	assert.Positive(s.t, pactServers["testservice-prego-pact-testing"].Port)
 	return s
 }
 

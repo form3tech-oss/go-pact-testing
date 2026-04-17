@@ -34,6 +34,15 @@ type pactName struct {
 	Name string `json:"name"`
 }
 
+const (
+	defaultRetryAttempts         = 150000
+	defaultRetryDelay            = 200 * time.Millisecond
+	mockServerHealthAttempts     = 100
+	mockServerHealthDelay        = 100 * time.Millisecond
+	providerVerificationDirMode  = 0o744
+	providerVerificationFileMode = 0o600
+)
+
 //nolint:gochecknoglobals // fixing is a breaking API change
 var (
 	pathOnce    sync.Once
@@ -44,8 +53,8 @@ var (
 
 func defaultRetryOptions() []retry.Option {
 	return []retry.Option{
-		retry.Attempts(150000),
-		retry.Delay(200 * time.Millisecond),
+		retry.Attempts(defaultRetryAttempts),
+		retry.Delay(defaultRetryDelay),
 		retry.DelayType(retry.FixedDelay),
 	}
 }
@@ -163,7 +172,7 @@ func setBinPath() {
 func buildPactClientOnce() {
 	once.Do(func() {
 		setBinPath()
-		pactClient = dsl.NewClient()
+		pactClient = dsl.NewClient("")
 	})
 }
 
@@ -378,7 +387,7 @@ func EnsurePactRunning(provider, consumer string) string {
 				return fmt.Errorf("calling mock server: %w", retry.Unrecoverable(err))
 			}
 			return err
-		}, retry.DelayType(retry.FixedDelay), retry.Delay(100*time.Millisecond), retry.Attempts(100))
+		}, retry.DelayType(retry.FixedDelay), retry.Delay(mockServerHealthDelay), retry.Attempts(mockServerHealthAttempts))
 		if err != nil {
 			log.
 				WithError(err).
@@ -414,7 +423,7 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 		if err := retry.Do(verify, retryOptions...); err != nil {
 			log.Error("Pact verification failed!!" +
 				"For more info on the error check the logs/pact*.log files, they are quite detailed")
-			t.Errorf(err.Error())
+			t.Error(err)
 		}
 	})
 }
@@ -546,9 +555,9 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 						allTestsSucceeded,
 						version)
 					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-					_ = os.MkdirAll(verificationDir+"/", 0o744)
+					_ = os.MkdirAll(verificationDir+"/", providerVerificationDirMode)
 					verificationFile := filepath.Join(verificationDir, filename)
-					if err := os.WriteFile(verificationFile, []byte(verificationJSON), 0o600); err != nil {
+					if err := os.WriteFile(verificationFile, []byte(verificationJSON), providerVerificationFileMode); err != nil {
 						t.Fatal(err)
 					}
 					outputJSON, err := json.Marshal(response)
@@ -557,7 +566,7 @@ func VerifyProviderPacts(params PactProviderTestParams) {
 					}
 
 					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-					if err := os.WriteFile(outFile, outputJSON, 0o600); err != nil {
+					if err := os.WriteFile(outFile, outputJSON, providerVerificationFileMode); err != nil {
 						t.Fatal(err)
 					}
 				})

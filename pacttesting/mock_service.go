@@ -25,6 +25,13 @@ type MockServer struct {
 	Running  bool   `json:"-"`
 }
 
+const (
+	pidDirMode        = 0o755
+	pidFileMode       = 0o600
+	stopRetryAttempts = 25
+	stopRetryDelay    = 200 * time.Millisecond
+)
+
 // call sends a message to the Pact service
 func (m *MockServer) call(method string, url string, content *string) error {
 	client := &http.Client{}
@@ -90,11 +97,11 @@ func (m *MockServer) writePidFile() {
 		return
 	}
 	dir, _ := os.Getwd()
-	_ = os.MkdirAll(filepath.FromSlash(filepath.Join(dir, "pact", "pids")), os.ModePerm)
+	_ = os.MkdirAll(filepath.FromSlash(filepath.Join(dir, "pact", "pids")), pidDirMode)
 	file := filepath.FromSlash(
 		fmt.Sprintf("%s/pact-%s-%s.json", filepath.Join(dir, "pact", "pids"), m.Provider, m.Consumer),
 	)
-	err = os.WriteFile(file, bytes, os.ModePerm)
+	err = os.WriteFile(file, bytes, pidFileMode)
 	if err != nil {
 		log.WithError(err).Errorf("unable to store mock server details")
 		return
@@ -120,7 +127,7 @@ func (m *MockServer) Stop() error {
 				return errors.New("server process is still alive")
 			}
 			return nil
-		}, retry.Attempts(25), retry.Delay(200*time.Millisecond), retry.DelayType(retry.FixedDelay)); err != nil {
+		}, retry.Attempts(stopRetryAttempts), retry.Delay(stopRetryDelay), retry.DelayType(retry.FixedDelay)); err != nil {
 			err = p.Kill()
 			if err != nil {
 				return fmt.Errorf("failed to kill process: %w", err)

@@ -11,6 +11,8 @@ import (
 
 type PactRequestMatchingFilter = func(map[string]interface{})
 
+const splitPactFileMode = 0o644
+
 // SplitPactBulkFile reads bulk PACT files, splits it into smaller ones
 // and writes output to destination directory
 func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters ...PactRequestMatchingFilter) error {
@@ -51,7 +53,7 @@ func SplitPactBulkFile(bulkFilePath string, outputDirPath string, requestFilters
 
 		description := sanitize(tc.Interactions[0].Description)
 		tcFilePath := filepath.Join(outputDirPath, description+".json")
-		if writeErr := os.WriteFile(tcFilePath, json, os.ModePerm); writeErr != nil {
+		if writeErr := os.WriteFile(tcFilePath, json, splitPactFileMode); writeErr != nil {
 			return fmt.Errorf("couldn't write test case to file - interaction idx: %d , "+
 				"output file path: %s, err: %w", idx, tcFilePath, writeErr)
 		}

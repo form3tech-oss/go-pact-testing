@@ -21,6 +21,14 @@ import (
 
 const providerHTTPScheme = "http://"
 
+const (
+	verificationDirMode       = 0o744
+	verificationFileMode      = 0o600
+	messageReadHeaderTimeout  = 3 * time.Second
+	messageWaitForPortTimeout = 5 * time.Second
+	waitForPortPollInterval   = 50 * time.Millisecond
+)
+
 func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducers dsl.MessageHandlers) {
 	buildPactClientOnce()
 
@@ -81,9 +89,9 @@ func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducer
 						err == nil && allTestsSucceeded,
 						version)
 					verificationDir := filepath.Join(topLevelDir, "build", "pact-verifications")
-					_ = os.MkdirAll(verificationDir+"/", 0o744)
+					_ = os.MkdirAll(verificationDir+"/", verificationDirMode)
 					verificationFile := filepath.Join(verificationDir, filename)
-					if err := os.WriteFile(verificationFile, []byte(verificationJSON), 0o600); err != nil {
+					if err := os.WriteFile(verificationFile, []byte(verificationJSON), verificationFileMode); err != nil {
 						t.Fatal(err)
 					}
 					outputJSON, err := json.Marshal(response)
@@ -92,7 +100,7 @@ func VerifyProviderMessagingPacts(params PactProviderTestParams, messageProducer
 					}
 
 					outFile := filepath.Join(topLevelDir, "build/pact-verifications/", "output-"+filename)
-					if err := os.WriteFile(outFile, outputJSON, 0o600); err != nil {
+					if err := os.WriteFile(outFile, outputJSON, verificationFileMode); err != nil {
 						t.Fatal(err)
 					}
 				})
@@ -213,13 +221,13 @@ func VerifyMessageProviderRaw(
 
 	server := http.Server{
 		Handler:           mux,
-		ReadHeaderTimeout: 3 * time.Second,
+		ReadHeaderTimeout: messageReadHeaderTimeout,
 	}
 
 	log.Printf("[DEBUG] API handler starting: port %d (%s)", port, ln.Addr())
 	go func() { _ = server.Serve(ln) }()
 
-	portErr := waitForPort(port, "tcp", getBindAddress(), 5*time.Second,
+	portErr := waitForPort(port, "tcp", getBindAddress(), messageWaitForPortTimeout,
 		fmt.Sprintf(`Timed out waiting for Daemon on port %d - are you sure it's running?`, port))
 
 	if portErr != nil {
@@ -244,7 +252,7 @@ func waitForPort(port int, network string, address string, timeoutDuration time.
 		case <-timeout:
 			log.Printf("[ERROR] Expected server to start < %s. %s", timeoutDuration, message)
 			return fmt.Errorf("expected server to start < %s. %s", timeoutDuration, message)
-		case <-time.After(50 * time.Millisecond):
+		case <-time.After(waitForPortPollInterval):
 			_, err := net.Dial(network, fmt.Sprintf("%s:%d", address, port))
 			if err == nil {
 				return nil
