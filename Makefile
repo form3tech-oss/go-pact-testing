@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := default
 
-GOLANGCI_VERSION := 1.61.0
+GOLANGCI_VERSION := 1.64.8
 
 platform := $(shell uname)
 pact_version := "1.88.51"
