@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avast/retry-go/v4"
+	retrygo "github.com/avast/retry-go/v4"
 	"github.com/pact-foundation/pact-go/dsl"
 	"github.com/pact-foundation/pact-go/types"
 	"github.com/pact-foundation/pact-go/utils"
@@ -42,11 +42,11 @@ var (
 	pactServers = make(map[string]*MockServer)
 )
 
-func defaultRetryOptions() []retry.Option {
-	return []retry.Option{
-		retry.Attempts(150000),
-		retry.Delay(200 * time.Millisecond),
-		retry.DelayType(retry.FixedDelay),
+func defaultRetryOptions() []retrygo.Option {
+	return []retrygo.Option{
+		retrygo.Attempts(150000),
+		retrygo.Delay(200 * time.Millisecond),
+		retrygo.DelayType(retrygo.FixedDelay),
 	}
 }
 
@@ -280,7 +280,7 @@ func AddPactInteraction(provider, consumer string, interaction *dsl.Interaction)
 	return pactServers[key].AddInteraction(interaction)
 }
 
-func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option) error {
+func VerifyInteractions(provider, consumer string, retryOptions ...retrygo.Option) error {
 	verify := func() error {
 		key := provider + consumer
 		err := pactServers[key].Verify()
@@ -298,7 +298,7 @@ func VerifyInteractions(provider, consumer string, retryOptions ...retry.Option)
 		retryOptions = defaultRetryOptions()
 	}
 	cwd, _ := os.Getwd()
-	if err := retry.Do(verify, retryOptions...); err != nil {
+	if err := retrygo.Do(verify, retryOptions...); err != nil {
 		return fmt.Errorf("pact interactions not matched - for details see %s/pact/logs/pact-%s.log", cwd, provider)
 	}
 	return nil
@@ -372,13 +372,13 @@ func EnsurePactRunning(provider, consumer string) string {
 			Consumer: consumer,
 			Provider: provider,
 		}
-		err = retry.Do(func() error {
+		err = retrygo.Do(func() error {
 			err := mockServer.call("GET", serverAddress, nil)
 			if err != nil && cmd.ProcessState != nil {
-				return fmt.Errorf("calling mock server: %w", retry.Unrecoverable(err))
+				return fmt.Errorf("calling mock server: %w", retrygo.Unrecoverable(err))
 			}
 			return err
-		}, retry.DelayType(retry.FixedDelay), retry.Delay(100*time.Millisecond), retry.Attempts(100))
+		}, retrygo.DelayType(retrygo.FixedDelay), retrygo.Delay(100*time.Millisecond), retrygo.Attempts(100))
 		if err != nil {
 			log.
 				WithError(err).
@@ -399,7 +399,7 @@ func EnsurePactRunning(provider, consumer string) string {
 
 // Runs mock services defined by the given pacts,
 // invokes testFunc then verifies that the pacts have been invoked successfully
-func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
+func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), retryOptions ...retrygo.Option) error {
 	t.Helper()
 	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
@@ -411,7 +411,7 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 			retryOptions = defaultRetryOptions()
 		}
 		verify := func() error { return checkVerificationStatus(pactFilePaths) }
-		if err := retry.Do(verify, retryOptions...); err != nil {
+		if err := retrygo.Do(verify, retryOptions...); err != nil {
 			log.Error("Pact verification failed!!" +
 				"For more info on the error check the logs/pact*.log files, they are quite detailed")
 			t.Errorf(err.Error())
@@ -421,7 +421,7 @@ func RunIntegrationTest(t *testing.T, pactFilePaths []Pact, testFunc func(), ret
 
 // Runs mock services defined by the given pacts,
 // invokes testFunc then verifies that the pacts have been invoked successfully
-func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retry.Option) error {
+func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retrygo.Option) error {
 	return TestWithStubServices(pactFilePaths, func() {
 		testFunc()
 
@@ -432,7 +432,7 @@ func IntegrationTest(pactFilePaths []Pact, testFunc func(), retryOptions ...retr
 			retryOptions = defaultRetryOptions()
 		}
 		verify := func() error { return checkVerificationStatus(pactFilePaths) }
-		if err := retry.Do(verify, retryOptions...); err != nil {
+		if err := retrygo.Do(verify, retryOptions...); err != nil {
 			log.Fatalf("Pact verification failed!!" +
 				"For more info on the error check the logs/pact*.log files, they are quite detailed")
 		}

@@ -12,6 +12,8 @@
 *.out
 .idea
 
+.gocache/
+
 pacttesting/target
 pacttesting/logs
 pact/

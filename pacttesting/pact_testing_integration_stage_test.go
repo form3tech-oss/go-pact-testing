@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avast/retry-go/v4"
+	retrygo "github.com/avast/retry-go/v4"
 	"github.com/pact-foundation/pact-go/dsl"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -245,7 +245,7 @@ func (s *pactTestingStage) test_service_a_is_called() *pactTestingStage {
 }
 
 func (s *pactTestingStage) test_service_a_was_invoked() *pactTestingStage {
-	assert.NoError(s.t, VerifyInteractions("testservicea", "go-pact-testing", retry.Attempts(3)))
+	assert.NoError(s.t, VerifyInteractions("testservicea", "go-pact-testing", retrygo.Attempts(3)))
 	return s
 }
 
