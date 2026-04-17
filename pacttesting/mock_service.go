@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	retrygo "github.com/avast/retry-go/v4"
+	"github.com/avast/retry-go/v4"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -120,14 +120,14 @@ func (m *MockServer) Stop() error {
 
 		// wait for process to exit after interrupt, if it fails to stop
 		// then kill it
-		if err := retrygo.Do(func() error {
+		if err := retry.Do(func() error {
 			// check if the process is still alive
 			err := p.Signal(syscall.Signal(0))
 			if err == nil {
 				return errors.New("server process is still alive")
 			}
 			return nil
-		}, retrygo.Attempts(stopRetryAttempts), retrygo.Delay(stopRetryDelay), retrygo.DelayType(retrygo.FixedDelay)); err != nil {
+		}, retry.Attempts(stopRetryAttempts), retry.Delay(stopRetryDelay), retry.DelayType(retry.FixedDelay)); err != nil {
 			err = p.Kill()
 			if err != nil {
 				return fmt.Errorf("failed to kill process: %w", err)
