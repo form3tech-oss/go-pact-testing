@@ -11,7 +11,7 @@ import (
 
 type PactRequestMatchingFilter = func(map[string]interface{})
 
-const splitPactFileMode = 0o600
+const splitPactFileMode = 0o644
 
 // SplitPactBulkFile reads bulk PACT files, splits it into smaller ones
 // and writes output to destination directory
