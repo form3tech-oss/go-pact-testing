@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/avast/retry-go/v4"
+	retry "github.com/avast/retry-go/v4"
 	log "github.com/sirupsen/logrus"
 )
 
