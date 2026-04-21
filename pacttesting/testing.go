@@ -240,17 +240,16 @@ func TestWithStubServices(pactFilePaths []Pact, testFunc func()) error {
 	pacts := groupByProvider(readAllPacts(pactFilePaths))
 
 	for _, server := range pactServers {
+		EnsurePactRunning(server.Provider, server.Consumer)
 		err := server.DeleteInteractions()
 		if err != nil {
-			log.WithError(err).Errorf("Error deleting interactions")
+			log.WithError(err).Error("Error deleting interactions")
 		}
 	}
 
 	var err error
 	for _, p := range pacts {
 		key := p.Provider.Name + p.Consumer.Name
-		EnsurePactRunning(p.Provider.Name, p.Consumer.Name)
-
 		for _, i := range p.Interactions {
 			err = pactServers[key].AddInteraction(i)
 			if err != nil {
@@ -327,11 +326,11 @@ func EnsurePactRunning(provider, consumer string) string {
 			return mockServer.BaseURL
 		}
 
-		log.Infof("starting new mock server for consumer: %s, provider: %s", consumer, provider)
+		port := assignPort(provider, consumer)
+		log.Infof("starting new mock server for consumer: %s, provider: %s, host: %s:%d", consumer, provider, bind, port)
 		// This is done manually rather than using pact-go's service manager code, since that pipes the output streams,
 		// so isn't suitable for long-running pact-servers if there is a problem that triggers stdout/stderr output.
 		// It also prevents the servers from remaining started when run from goland or compiled test binaries
-		port := assignPort(provider, consumer)
 		args := []string{
 			"service",
 			"--pact-specification-version",
